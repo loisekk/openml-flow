@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>open-mlpipe — Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/styles/app.css">
+<style>
+  /* Base resets to absolutely prevent layout overlap */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    background: #0d0d0d !important;
+    color: #fff !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  /* React mounts everything inside #root */
+  #root { 
+    height: 100vh; 
+    width: 100vw;
+  }
+</style>
+</head>
+<body>
+
+<!-- React will inject the TopNav, Dashboard, Workspace, and Modals here -->
+<div id="root"></div>
+
+<!-- Entry point is now main.tsx -->
+<script type="module" src="/src/main.tsx"></script>
+
+</body>
+</html>
