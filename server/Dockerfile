@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Install system dependencies for scikit-learn/pandas
-RUN apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0
 
 WORKDIR /app
 
