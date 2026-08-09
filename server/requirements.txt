@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-jose[cryptography]
+pydantic
+python-multipart
+openai
+scikit-learn
+pandas
+numpy
+matplotlib
+seaborn
