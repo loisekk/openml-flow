@@ -1,0 +1,194 @@
+/* Workspace.css - Premium Layered Theme */
+
+:root {
+  --bg-canvas: #181818;
+  --bg-grid: #242424;
+  --bg-top-nav: #232323;
+  --bg-console: #1E1E1E;
+  --bg-panel: #262626;
+  --bg-panel-hover: #303030;
+  --accent-orange: #FF8A00;
+  --accent-orange-light: #FF7300;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B8B8B8;
+  --text-tertiary: #666666;
+  --border-subtle: #333333;
+  --radius-lg: 12px;
+  --radius-md: 8px;
+}
+
+.workspace-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg-canvas);
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+/* --- TOP HEADER --- */
+.ws-workflow-header {
+  height: 56px;
+  background: var(--bg-top-nav);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  z-index: 10;
+}
+
+.ws-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ws-floating-nav {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2D2D2D;
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.ws-nav-tab {
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.ws-nav-tab:hover {
+  background: #343434;
+}
+
+.ws-nav-tab.active {
+  background: #171717;
+  color: var(--text-primary);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* --- EXECUTE BUTTON --- */
+.ws-btn-execute {
+  height: 44px;
+  padding: 0 24px;
+  background: linear-gradient(135deg, var(--accent-orange), var(--accent-orange-light));
+  border: none;
+  border-radius: var(--radius-lg);
+  color: #000;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(255, 138, 0, 0.25);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.ws-btn-execute:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 138, 0, 0.4);
+}
+
+.ws-btn-execute:active {
+  transform: scale(0.98);
+}
+
+/* --- RIGHT FLOATING TOOLBAR --- */
+.ws-right-toolbar {
+  position: absolute;
+  right: 24px;
+  top: 80px;
+  background: rgba(38, 38, 38, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.ws-toolbar-btn {
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 150ms ease;
+}
+
+.ws-toolbar-btn:hover {
+  background: var(--bg-panel-hover);
+  color: var(--accent-orange);
+  border: 1px solid var(--accent-orange);
+}
+
+/* --- BOTTOM CONSOLE --- */
+.ws-bottom-panel {
+  height: 220px;
+  background: var(--bg-console);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.ws-console-tabs {
+  display: flex;
+  gap: 16px;
+  padding: 0 24px;
+  height: 40px;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ws-console-tab {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: color 150ms ease;
+}
+
+.ws-console-tab.active {
+  color: var(--text-primary);
+}
+
+/* --- EMPTY STATE --- */
+.ws-empty-state {
+  position: absolute;
+  top: 80px;
+  left: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ws-trigger-node {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
