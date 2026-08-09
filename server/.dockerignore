@@ -1,0 +1,10 @@
+# Never bake local data or secrets into the image
+openmlpipe.db
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+__pycache__/
+*.py[cod]
+.env
+venv/
