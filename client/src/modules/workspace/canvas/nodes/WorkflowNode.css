@@ -1,0 +1,195 @@
+/* WorkflowNode.css */
+
+.workflow-node {
+  position: relative;
+  width: 180px; /* Adjusted from 132px for better text fit, can be changed back */
+  min-height: 74px;
+  background: #1B1B1B;
+  border: 1px solid #4A4A4A;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  transition: border-color 120ms ease, box-shadow 150ms ease;
+  z-index: 10;
+}
+
+/* Hover Shadow */
+.workflow-node:hover {
+  border-color: #666666;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  z-index: 20;
+}
+
+/* Selected State */
+.workflow-node.selected {
+  border-color: #FF8A00;
+  box-shadow: 0 0 0 3px rgba(255,138,0,.20), 0 8px 24px rgba(0,0,0,.5);
+}
+
+/* Disabled State */
+.workflow-node.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Node Layout */
+.wf-node-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.wf-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.wf-text-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wf-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-subtitle {
+  font-size: 12px;
+  color: #9A9A9A;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- HANDLES (Magnetic & Glowing) --- */
+.wf-handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #D6D6D6;
+  border: 2px solid #111111;
+  transition: width 120ms ease, height 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.wf-handle:hover {
+  width: 18px;
+  height: 18px;
+  background: var(--handle-color, #FF8A00);
+  box-shadow: 0 0 12px var(--handle-color, #FF8A00);
+}
+
+/* --- STATUS DOT (Top Right) --- */
+.wf-status-dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #333;
+  transition: background 200ms ease;
+}
+
+.wf-status-dot.running {
+  background: #FF8A00;
+  animation: pulse-orange 1.5s infinite;
+}
+
+.wf-status-dot.success {
+  background: #32D74B;
+  box-shadow: 0 0 8px #32D74B;
+}
+
+.wf-status-dot.error {
+  background: #FF4D5A;
+  box-shadow: 0 0 8px #FF4D5A;
+}
+
+@keyframes pulse-orange {
+  0% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(255, 138, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0); }
+}
+
+/* --- EXECUTION STATES --- */
+
+/* Running State (Animated Orange Border) */
+.workflow-node.status-running {
+  border: 1px solid transparent;
+  background: 
+    linear-gradient(#1B1B1B, #1B1B1B) padding-box,
+    conic-gradient(from 0deg, #FF8A00 0%, #FF8A00 40%, transparent 70%, transparent 100%) border-box;
+  animation: spin-border 1.5s linear infinite;
+}
+
+@keyframes spin-border {
+  0% { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+
+/* Success State */
+.workflow-node.status-success {
+  animation: success-flash 500ms ease-out;
+}
+
+@keyframes success-flash {
+  0% { box-shadow: 0 0 0 0 rgba(50, 215, 75, 0.7); border-color: #32D74B; }
+  100% { box-shadow: 0 0 0 12px rgba(50, 215, 75, 0); }
+}
+
+/* Error State (Shake) */
+.workflow-node.status-error {
+  border-color: #FF4D5A;
+  animation: shake 120ms ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+/* --- FLOATING TOOLBAR --- */
+.wf-node-toolbar {
+  background: #1E1E1E !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+  display: flex !important;
+  gap: 4px !important;
+}
+
+.wf-node-toolbar button {
+  background: transparent;
+  border: none;
+  color: #888;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 120ms, color 120ms;
+}
+
+.wf-node-toolbar button:hover {
+  background: #2C2C2C;
+  color: #fff;
+}
