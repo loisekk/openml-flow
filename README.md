@@ -64,13 +64,13 @@ OpenML Flow uses a decoupled architecture with a React frontend communicating wi
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                       React Frontend                         │
+│                       React Frontend                        │
 │  (React 19, Vite, React Flow, Zustand, Monaco Editor)       │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / Server-Sent Events (SSE)
 ┌──────────────────────────▼──────────────────────────────────┐
-│                      FastAPI Backend                         │
-│           (Python, SQLite, JWT Auth, OpenAI SDK)             │
+│                      FastAPI Backend                        │
+│           (Python, SQLite, JWT Auth, OpenAI SDK)            │
 └──────────────┬───────────────────────────────┬──────────────┘
                │                               │
                ▼                               ▼
