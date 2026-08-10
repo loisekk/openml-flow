@@ -44,10 +44,9 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      # This saves your uploaded datasets locally
+      # Mount directories, not files. This prevents the Windows mount bug.
       - ./uploads:/app/uploads
-      # This saves your user accounts and workflows locally
-      - ./openmlpipe.db:/app/openmlpipe.db
+      - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
 
@@ -59,9 +58,6 @@ services:
     depends_on:
       - backend
 ```
-
-> **⚠️ Important for Windows Users:** 
-> Before running the command below, you must manually create an empty file named `openmlpipe.db` in the same folder. If you don't, Docker Desktop will mount it as a directory instead of a file, which will crash the SQLite database. You can do this by running `echo. > openmlpipe.db` in your Command Prompt.
 
 3. Run the application:
 ```bash

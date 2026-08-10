@@ -20,8 +20,6 @@ If you don't have them already, download and install:
 3. Open the file in a text editor and paste the following configuration:
 
 ```yaml
-version: '3.8'
-
 services:
   backend:
     image: loisekk/openml-flow-backend:latest
@@ -29,10 +27,9 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      # This saves your uploaded datasets so they don't disappear when you close the app
+      # Mount directories, not files. This prevents the Windows mount bug.
       - ./uploads:/app/uploads
-      # This saves your user accounts and workflows
-      - ./openmlpipe.db:/app/openmlpipe.db
+      - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
 
@@ -63,7 +60,7 @@ You should see the OpenML Flow login screen! 🎉
 ## Phase 2: Setting Up Your Account
 
 1. On the login screen, click **Register**.
-2. Create a username and password. *(Don't worry, this is stored locally on your machine in the `openmlpipe.db` file we set up in Docker. It is not sent to any external servers).*
+2. Create a username and password. *(Don't worry, this is stored locally on your machine in the `data/openmlpipe.db` file we set up in Docker. It is not sent to any external servers).*
 3. Log in with your new credentials. You will arrive at the **Dashboard**.
 
 ---

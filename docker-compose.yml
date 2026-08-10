@@ -1,22 +1,21 @@
 # docker-compose.yml
-version: '3.8'
-
 services:
   backend:
     build: ./server
+    image: loisekk/openml-flow-backend:latest
     container_name: openmlpipe-backend
     ports:
       - "3001:3001"
     volumes:
-      # Map local uploads folder to container
+      # Mount directories, not files. This prevents the Windows mount bug.
       - ./server/uploads:/app/uploads
-      # Persist the SQLite database
-      - ./server/openmlpipe.db:/app/openmlpipe.db
+      - ./server/data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
 
   frontend:
     build: ./client
+    image: loisekk/openml-flow-frontend:latest
     container_name: openmlpipe-frontend
     ports:
       - "8080:80"

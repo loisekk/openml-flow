@@ -4,6 +4,7 @@ openmlpipe.db
 *.sqlite
 *.sqlite3
 uploads/
+data/
 __pycache__/
 *.py[cod]
 .env

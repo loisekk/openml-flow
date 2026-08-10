@@ -42,6 +42,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 UPLOADS_DIR = "uploads"
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+DATA_DIR = "data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # --- Password Hashing ---
 class PasswordHasher:
@@ -64,7 +66,7 @@ class PasswordHasher:
 pwd_context = PasswordHasher()
 
 # --- Database Setup ---
-DB_NAME = "openmlpipe.db"
+DB_NAME = "data/openmlpipe.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
