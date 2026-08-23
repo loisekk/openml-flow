@@ -1,16 +1,20 @@
+// client/src/modules/workspace/hooks/useAutoSave.ts
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkflowStore } from '../store/workflowStore';
 import { useAuthStore } from '../../auth/authStore';
 
 export const useAutoSave = (workflowId: string) => {
-  const { nodes, edges, workflowName } = useWorkflowStore();
+  const { nodes, edges, workflowName, isHydrated, datasetIds } = useWorkflowStore(); // <-- ADDED isHydrated, datasetIds
   const { token } = useAuthStore();
   const navigate = useNavigate();
   const [saveStatus, setSaveStatus] = useState<'Saved' | 'Saving...' | 'Error'>('Saved');
 
   useEffect(() => {
-    if (nodes.length === 0 && edges.length === 0) return; 
+    // CRITICAL: Do not save if the workflow hasn't been hydrated from the DB yet.
+    // This prevents overwriting a saved workflow with an empty `nodes: []` array on refresh.
+    if (!isHydrated) return; 
+    if (nodes.length === 0 && edges.length === 0 && datasetIds.length === 0) return; 
     
     setSaveStatus('Saving...');
 
@@ -28,7 +32,8 @@ export const useAutoSave = (workflowId: string) => {
           body: JSON.stringify({
             id: payloadId,
             name: workflowName || 'Untitled Workflow',
-            graphData: { nodes, edges }
+            // INCLUDE datasetIds IN THE GRAPH DATA
+            graphData: { nodes, edges, datasetIds } 
           })
         });
 
@@ -43,10 +48,10 @@ export const useAutoSave = (workflowId: string) => {
       } catch (err) {
         setSaveStatus('Error');
       }
-    }, 1500);
+    }, 1000); // Reduced debounce to 1000ms for snappier saves
 
     return () => clearTimeout(debounceTimer);
-  }, [nodes, edges, workflowId, token, navigate, workflowName]); 
+  }, [nodes, edges, workflowId, token, navigate, workflowName, isHydrated, datasetIds]); // <-- ADDED isHydrated, datasetIds
 
   return saveStatus;
 };
