@@ -1,10 +1,14 @@
+// client/src/modules/datasets/Datasets.tsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Home, Workflow, LayoutTemplate, Download, Database, Table2, Brain, Box, Rocket, ScrollText, AlertTriangle, KeyRound, Lock, Globe, Settings as SettingsIcon, Search, Bell, Cpu, Upload, Trash2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Home, Workflow, LayoutTemplate, Download, Database, Table2, Brain, Box, Rocket, ScrollText, AlertTriangle, KeyRound, Lock, Globe, Settings as SettingsIcon, Search, Bell, Cpu, Upload, Trash2, ArrowLeft } from 'lucide-react';
 import '../dashboard/Dashboard.css';
 
 const Datasets = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromWorkflow = searchParams.get('fromWorkflow'); // e.g., "12"
+  
   const [datasets, setDatasets] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -120,6 +124,16 @@ const Datasets = () => {
           <div className="dash-content">
             <div className="dash-header">
               <div>
+                {/* CONTEXT-AWARE BACK BUTTON */}
+                {fromWorkflow ? (
+                  <button 
+                    onClick={() => navigate(`/workspace/${fromWorkflow}`)} 
+                    style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: 0 }}
+                  >
+                    <ArrowLeft size={16} /> Back to Workflow
+                  </button>
+                ) : null}
+                
                 <h1 className="dash-title">Local Datasets</h1>
                 <p className="dash-subtitle">Manage datasets stored on your local machine.</p>
               </div>
