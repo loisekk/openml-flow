@@ -38,6 +38,7 @@ function getNodeCode(node: Node<MLNodeData>): string {
     case 'View Stats': return `# EDA: Stats\nprint(df.describe())\n\n`;
     case 'Missing Value Report': return `# EDA: Missing Values\nprint(df.isnull().sum())\n\n`;
     case 'Data Preview': return `# EDA: Data Preview\nprint(df.head())\n\n`;
+    case 'Correlation Matrix': return `# EDA: Correlation Matrix\nprint(df.corr(numeric_only=True))\n\n`;
 
     // 3. Data Cleaning
     case 'Drop Duplicates': return `# Cleaning: Drop Duplicates\nprint(f"Shape before duplicates: {df.shape}")\ndf = df.drop_duplicates()\nprint(f"Shape after duplicates: {df.shape}")\n\n`;
