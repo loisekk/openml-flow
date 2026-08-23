@@ -1,3 +1,4 @@
+// client/src/modules/workspace/UltimateWorkspace.tsx
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import WorkspaceCanvas from './canvas/WorkspaceCanvas';
@@ -7,6 +8,7 @@ import EvaluationsPanel from './panels/EvaluationsPanel';
 import AIAssistantDrawer from './panels/AIAssistantDrawer';
 import NodeStudio from './panels/NodeStudio';
 import { useWorkflowStore } from './store/workflowStore';
+import { useAuthStore } from '../auth/authStore'; // <-- IMPORT AUTH
 import { useExecutionEngine } from './hooks/useExecutionEngine';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useValidationEngine } from './hooks/useValidationEngine';
@@ -17,6 +19,8 @@ import './UltimateWorkspace.css';
 const UltimateWorkspace = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { token } = useAuthStore(); // <-- GET TOKEN
+  
   const { 
     activeTab, setTab, addNode, undo, redo, past, future, setSelectedNodeId, nodes,
     bottomPanelHeight, bottomPanelCollapsed, toggleBottomPanel,
@@ -24,7 +28,10 @@ const UltimateWorkspace = () => {
     aiAssistantOpen, toggleAIAssistant,
     setBottomPanelHeight, setInspectorWidth, setAIAssistantWidth, aiAssistantWidth,
     activeNodeStudioId, setActiveNodeStudio,
-    workflowName, setWorkflowName 
+    workflowName, setWorkflowName,
+    isHydrated, // <-- GET HYDRATION STATE
+    resetWorkspace, // <-- GET RESET FUNCTION
+    setGraph // <-- GET SET GRAPH FUNCTION
   } = useWorkflowStore();
   
   const { executeWorkflow, isExecuting } = useExecutionEngine();
@@ -41,6 +48,55 @@ const UltimateWorkspace = () => {
 
   const activeIssues = issues.filter(i => i.severity !== 'success');
   const errorCount = activeIssues.filter(i => i.severity === 'error').length;
+
+  // CRITICAL: HYDRATION ON URL CHANGE OR REFRESH
+  useEffect(() => {
+    if (!id) return;
+    
+    // Reset store immediately to prevent state bleeding from previous workflow
+    resetWorkspace();
+
+    const loadWorkflow = async () => {
+      if (id.startsWith('wf-') || id === 'new') {
+        // It's a mock/new workflow, just set clean state
+        setGraph(id, [], []);
+      } else {
+        // It's a real DB ID, fetch from backend
+        try {
+          const res = await fetch(`/api/workflows/load/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.graphData) {
+              setGraph(
+                id, 
+                data.graphData.nodes || [], 
+                data.graphData.edges || [], 
+                data.graphData.datasetIds || [],
+                data.name || 'Untitled Workflow'
+              );
+            } else {
+              setGraph(id, [], [], [], data.name || 'Untitled Workflow');
+            }
+          } else {
+            // Handle 404 (Not Found)
+            setGraph(id, [], []);
+            console.error('Workflow not found');
+          }
+        } catch (err) {
+          setGraph(id, [], []);
+        }
+      }
+    };
+
+    loadWorkflow();
+
+    // Cleanup on unmount
+    return () => {
+      resetWorkspace();
+    };
+  }, [id, token, resetWorkspace, setGraph]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -130,6 +186,15 @@ const UltimateWorkspace = () => {
     setBottomPanelHeight(heights[nextIdx >= 0 ? nextIdx : 1]);
   };
 
+  // LOADING STATE: Prevent rendering canvas until hydrated to avoid empty state flash
+  if (!isHydrated) {
+    return (
+      <div className="uw-root" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading workflow...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="uw-root" style={{ overflow: 'hidden' }}>
       {/* 1. GLOBAL HEADER */}
@@ -141,14 +206,13 @@ const UltimateWorkspace = () => {
         <div className="uw-nav-links">
           <span className="uw-nav-link active">Studio</span>
           <span className="uw-nav-link">Models</span>
-          {/* WIRED UP NAVIGATION */}
-          <span className="uw-nav-link" onClick={() => navigate('/datasets')}>Datasets</span>
+          {/* PASS WORKFLOW CONTEXT TO DATASETS */}
+          <span className="uw-nav-link" onClick={() => navigate(`/datasets?fromWorkflow=${id}`)}>Datasets</span>
           <span className="uw-nav-link">Experiments</span>
           <span className="uw-nav-link">Deployments</span>
         </div>
         <div className="uw-header-right">
           <span>🔍 Search</span><span>🔔</span>
-          {/* WIRED UP SETTINGS */}
           <span style={{ cursor: 'pointer' }} onClick={() => navigate('/settings')}>⚙️</span>
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-elevated)' }}></div>
         </div>
@@ -157,7 +221,7 @@ const UltimateWorkspace = () => {
       {/* 2. WORKFLOW HEADER */}
       <header className="uw-workflow-header">
         <div className="uw-breadcrumb">
-          <span style={{ color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>←</span>
+          <span style={{ color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => { resetWorkspace(); navigate('/dashboard'); }}>←</span>
           <span style={{ color: 'var(--text-muted)' }}>Personal</span>
           <span style={{ color: 'var(--border)' }}>/</span>
           
@@ -201,10 +265,7 @@ const UltimateWorkspace = () => {
       {/* 3. MAIN FLEX LAYOUT */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-primary)' }}>
         
-        {/* TOP AREA: Left Sidebar + Canvas + Inspector */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          
-          {/* LEFT: NODE LIBRARY */}
           <aside className="uw-left-panel" style={{ width: 240 }}>
             <div className="uw-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               Node Library
@@ -217,7 +278,6 @@ const UltimateWorkspace = () => {
               className="uw-search" 
               placeholder="Search nodes... (⌘K)" 
             />
-            
             <div className="uw-node-list">
               {nodeSearchQuery ? (
                 <div style={{ padding: '4px' }}>
@@ -285,16 +345,12 @@ const UltimateWorkspace = () => {
                 <div className="uw-top-cards">
                   <div className="uw-card" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setShowDiagnostics(!showDiagnostics)}>
                     <div className="uw-card-title">PIPELINE HEALTH</div>
-                    <div className="uw-card-value" style={{ color: errorCount > 0 ? 'var(--accent-red)' : activeIssues.length > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }}>
-                      {healthScore}% Ready
-                    </div>
+                    <div className="uw-card-value" style={{ color: errorCount > 0 ? 'var(--accent-red)' : activeIssues.length > 0 ? 'var(--accent-amber)' : 'var(--accent-green)' }}>{healthScore}% Ready</div>
                   </div>
                   <div className="uw-card"><div className="uw-card-title">RESOURCE MONITOR</div><div style={{ fontSize: '12px' }}>CPU: 12% | RAM: 1.4GB</div></div>
                 </div>
-
                 <div className="uw-canvas-wrapper">
                   <WorkspaceCanvas />
-                  
                   {nodes.length === 0 && (
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
                       <h2>Build Your ML Pipeline</h2>
@@ -306,54 +362,36 @@ const UltimateWorkspace = () => {
             )}
           </main>
 
-          {/* INSPECTOR */}
           {!inspectorCollapsed ? (
             <>
               <div style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0 }} onMouseDown={startHResize} title="Drag to resize" />
-              <div style={{ width: inspectorWidth, flexShrink: 0 }}>
-                <InspectorPanel />
-              </div>
+              <div style={{ width: inspectorWidth, flexShrink: 0 }}><InspectorPanel /></div>
             </>
           ) : (
-            <button onClick={toggleInspector} style={reopenBtnStyle} title="Open Inspector (⌘⇧I)">
-              <PanelRightOpen size={16} />
-            </button>
+            <button onClick={toggleInspector} style={reopenBtnStyle} title="Open Inspector (⌘⇧I)"><PanelRightOpen size={16} /></button>
           )}
         </div>
 
-        {/* BOTTOM DOCK */}
         {!bottomPanelCollapsed ? (
           <>
-            <div style={{ height: 4, cursor: 'row-resize', background: 'transparent', flexShrink: 0 }} onMouseDown={startVResize} onDoubleClick={cycleBottomPanelHeight} title="Drag to resize / Double-click to cycle" />
-            <div style={{ height: bottomPanelHeight, flexShrink: 0, overflow: 'hidden' }}>
-              <BottomPanel onCollapse={toggleBottomPanel} />
-            </div>
+            <div style={{ height: 4, cursor: 'row-resize', background: 'transparent', flexShrink: 0 }} onMouseDown={startVResize} onDoubleClick={cycleBottomPanelHeight} title="Drag to resize" />
+            <div style={{ height: bottomPanelHeight, flexShrink: 0, overflow: 'hidden' }}><BottomPanel onCollapse={toggleBottomPanel} /></div>
           </>
         ) : (
           <div style={{ height: 32, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
-            <button onClick={toggleBottomPanel} style={reopenBtnStyle} title="Open Dev Panel (⌘J)">
-              <PanelBottomOpen size={16} /> Open Dev Panel
-            </button>
+            <button onClick={toggleBottomPanel} style={reopenBtnStyle} title="Open Dev Panel (⌘J)"><PanelBottomOpen size={16} /> Open Dev Panel</button>
           </div>
         )}
       </div>
 
-      {/* 4. STATUS BAR */}
       <footer className="uw-status-bar">
         <span style={{ color: errorCount > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }}>{errorCount > 0 ? '✕ Pipeline contains errors' : '● Workflow valid'}</span>
         <span>● {saveStatus}</span>
-        <span style={{ marginLeft: 'auto' }}>Python 3.11</span>
-        <span>React Flow</span>
+        <span style={{ marginLeft: 'auto' }}>Python 3.11</span><span>React Flow</span>
         <span style={{ color: 'var(--accent-green)' }}>● Local Runtime Connected</span>
       </footer>
 
-      {/* 5. FLOATING AI BUTTON & DRAWER */}
-      {!aiAssistantOpen && (
-        <button onClick={toggleAIAssistant} style={floatingAIBtnStyle} title="Open AI Assistant (⌘⇧J)">
-          <Sparkles size={20} color="#fff" />
-        </button>
-      )}
-      
+      {!aiAssistantOpen && <button onClick={toggleAIAssistant} style={floatingAIBtnStyle} title="Open AI Assistant (⌘⇧J)"><Sparkles size={20} color="#fff" /></button>}
       {aiAssistantOpen && (
         <>
           <div style={{ width: 4, cursor: 'col-resize', background: 'transparent', position: 'absolute', right: aiAssistantWidth, top: 120, bottom: 32, zIndex: 1001 }} onMouseDown={startAIResize} />
@@ -361,27 +399,13 @@ const UltimateWorkspace = () => {
         </>
       )}
 
-      {/* 6. NODE STUDIO OVERLAY */}
-      {activeNodeStudioId && (
-        <NodeStudio nodeId={activeNodeStudioId} onClose={() => setActiveNodeStudio(null)} />
-      )}
+      {activeNodeStudioId && <NodeStudio nodeId={activeNodeStudioId} onClose={() => setActiveNodeStudio(null)} />}
     </div>
   );
 };
 
-const ghostBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  background: 'none', border: 'none', color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '13px', marginRight: '8px'
-});
-
-const reopenBtnStyle: React.CSSProperties = {
-  background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px'
-};
-
-const floatingAIBtnStyle: React.CSSProperties = {
-  position: 'absolute', bottom: 48, right: 24, zIndex: 1000, width: 48, height: 48, borderRadius: 14,
-  background: 'linear-gradient(135deg, #7C3AED, #A855F7)', border: 'none', cursor: 'pointer',
-  boxShadow: '0 0 20px rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  transition: 'transform 0.15s ease'
-};
+const ghostBtnStyle = (disabled: boolean): React.CSSProperties => ({ background: 'none', border: 'none', color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '13px', marginRight: '8px' });
+const reopenBtnStyle: React.CSSProperties = { background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' };
+const floatingAIBtnStyle: React.CSSProperties = { position: 'absolute', bottom: 48, right: 24, zIndex: 1000, width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg, #7C3AED, #A855F7)', border: 'none', cursor: 'pointer', boxShadow: '0 0 20px rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 export default UltimateWorkspace;
