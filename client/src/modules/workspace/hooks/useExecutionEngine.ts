@@ -88,6 +88,7 @@ export const useExecutionEngine = () => {
   };
 
   // Execute Single Node (For Node Studio "Run Node" Button)
+  // This acts like Jupyter: it runs the selected node AND all nodes before it!
   const executeNode = async (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -95,13 +96,23 @@ export const useExecutionEngine = () => {
     updateNodeStatus(nodeId, 'running');
     addExecutionLog(`[INFO] Executing Node: ${node.data.title}...`);
 
-    const nodeCode = generateSingleNodeCode(node);
+    // 1. Find the index of the selected node
+    const nodeIndex = nodes.findIndex(n => n.id === nodeId);
+    
+    // 2. Gather all nodes from index 0 up to the selected node
+    const upstreamNodes = nodes.slice(0, nodeIndex + 1);
+
+    // 3. Generate combined code for all upstream nodes
+    let combinedNodeCode = `import pandas as pd\nimport numpy as np\n\n`;
+    upstreamNodes.forEach(n => {
+      combinedNodeCode += generateSingleNodeCode(n);
+    });
 
     try {
       const response = await fetch('/api/run/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: nodeCode })
+        body: JSON.stringify({ code: combinedNodeCode }) // Send combined code!
       });
 
       if (!response.ok) throw new Error('Failed to start node execution');
@@ -114,7 +125,7 @@ export const useExecutionEngine = () => {
         try {
           const log = JSON.parse(event.data);
           addExecutionLog(log);
-          if (typeof log === 'string' && log.includes('[STDERR]') || log.includes('[ERROR]')) {
+          if (typeof log === 'string' && (log.includes('[STDERR]') || log.includes('[ERROR]'))) {
             hasError = true;
           }
         } catch (e) {
