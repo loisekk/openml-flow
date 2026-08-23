@@ -1,3 +1,4 @@
+// client/src/modules/dashboard/Dashboard.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -13,42 +14,23 @@ import './Dashboard.css';
 const Dashboard = () => {
   const navigate = useNavigate();
   const { workflows, createWorkflow, deleteWorkflow } = useDashboardStore();
-  const { setGraph } = useWorkflowStore();
+  const { resetWorkspace } = useWorkflowStore(); // <-- IMPORT resetWorkspace
   const { token, logout } = useAuthStore();
   
   const [activeTab, setActiveTab] = useState('workflows');
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleCreate = () => {
-    setGraph([], []);
+    // Clear state before creating a new workflow
+    resetWorkspace();
     const newId = createWorkflow();
     navigate(`/workspace/${newId}`);
   };
 
   const handleRowClick = async (id: string) => {
-    if (id.startsWith('wf-')) {
-      setGraph([], []);
-      navigate(`/workspace/${id}`);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/workflows/load/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      
-      if (data.graphData) {
-        setGraph(data.graphData.nodes || [], data.graphData.edges || []);
-      } else {
-        setGraph([], []);
-      }
-      navigate(`/workspace/${id}`);
-    } catch (error) {
-      console.error('Failed to load workflow', error);
-      setGraph([], []);
-      navigate(`/workspace/${id}`);
-    }
+    // Clear state before navigating to prevent state bleeding
+    resetWorkspace();
+    navigate(`/workspace/${id}`);
   };
 
   const filteredWorkflows = workflows.filter(wf => 
