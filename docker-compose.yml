@@ -3,7 +3,7 @@ services:
   backend:
     build: ./server
     image: loisekk/openml-flow-backend:latest
-    container_name: openmlpipe-backend
+    container_name: openml-flow-backend
     ports:
       - "3001:3001"
     volumes:
@@ -16,7 +16,7 @@ services:
   frontend:
     build: ./client
     image: loisekk/openml-flow-frontend:latest
-    container_name: openmlpipe-frontend
+    container_name: openml-flow-frontend
     ports:
       - "8080:80"
     depends_on:
