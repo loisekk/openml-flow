@@ -80,6 +80,10 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
       const data = await res.json();
       if (data.path) {
         updateNodeParameters(node.id, 'filePath', data.path);
+        
+        // CRITICAL: Associate this dataset with the active workflow
+        // This ensures the workflow knows what data it belongs to
+        useWorkflowStore.getState().associateDataset(data.filename);
       }
     } catch (err) {
       console.error('Upload failed', err);
