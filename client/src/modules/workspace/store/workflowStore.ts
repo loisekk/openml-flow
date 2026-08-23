@@ -1,3 +1,4 @@
+// client/src/modules/workspace/store/workflowStore.ts
 import { create } from 'zustand';
 import { Node, Edge, OnNodesChange, OnEdgesChange, OnConnect, applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
 import { MLNodeData } from '../config/nodeRegistry';
@@ -8,6 +9,12 @@ interface GraphSnapshot {
 }
 
 interface WorkflowState {
+  // Identity & Hydration
+  activeWorkflowId: string | null;
+  isHydrated: boolean;
+  workflowName: string;
+  datasetIds: string[];
+  
   nodes: Node[];
   edges: Edge[];
   selectedNodeId: string | null;
@@ -19,19 +26,22 @@ interface WorkflowState {
   executionData: any | null; 
   executionMetrics: any | null;
   customWorkflowCode: string | null;
-  workflowName: string; 
   
-  // Phase 10: History
   past: GraphSnapshot[];
   future: GraphSnapshot[];
   
-  // Dockable Panel UI State
   bottomPanelHeight: number;
   bottomPanelCollapsed: boolean;
   inspectorWidth: number;
   inspectorCollapsed: boolean;
   aiAssistantOpen: boolean;
   aiAssistantWidth: number;
+  
+  // Actions
+  setGraph: (id: string, nodes: Node[], edges: Edge[], datasets?: string[], name?: string) => void;
+  resetWorkspace: () => void;
+  setWorkflowName: (name: string) => void;
+  associateDataset: (datasetId: string) => void;
   
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
@@ -51,17 +61,13 @@ interface WorkflowState {
   setExecutionData: (data: any) => void; 
   setExecutionMetrics: (metrics: any) => void;
   setCustomWorkflowCode: (code: string | null) => void;
-  setWorkflowName: (name: string) => void; 
-  updateNodeStatus: (nodeId: string, status: 'idle' | 'running' | 'success' | 'error') => void; // <-- ADDED
+  updateNodeStatus: (nodeId: string, status: 'idle' | 'running' | 'success' | 'error') => void;
   
-  // Phase 10: Actions
   snapshot: () => void;
   undo: () => void;
   redo: () => void;
   loadTemplate: (nodes: Node[], edges: Edge[]) => void;
-  setGraph: (nodes: Node[], edges: Edge[]) => void;
 
-  // Panel Actions
   setBottomPanelHeight: (h: number) => void;
   toggleBottomPanel: () => void;
   setInspectorWidth: (w: number) => void;
@@ -72,6 +78,11 @@ interface WorkflowState {
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
+  activeWorkflowId: null,
+  isHydrated: false, // CRITICAL: Starts false. Prevents autosave from wiping DB.
+  workflowName: 'Untitled Workflow',
+  datasetIds: [],
+  
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -83,7 +94,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   executionData: null,
   executionMetrics: null,
   customWorkflowCode: null,
-  workflowName: 'Untitled Workflow', 
   past: [],
   future: [],
 
@@ -93,6 +103,38 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   inspectorCollapsed: false,
   aiAssistantOpen: false,
   aiAssistantWidth: 400,
+
+  // HYDRATION & RESET LOGIC
+  setGraph: (id, nodes, edges, datasets = [], name = 'Untitled Workflow') => set({
+    activeWorkflowId: id,
+    nodes,
+    edges,
+    datasetIds: datasets,
+    workflowName: name,
+    isHydrated: true, // Workflow is safe to save now
+    past: [],
+    future: [],
+    customWorkflowCode: null,
+    selectedNodeId: null,
+    activeNodeStudioId: null
+  }),
+
+  resetWorkspace: () => set({
+    activeWorkflowId: null,
+    isHydrated: false, // Lock autosave immediately on leave/switch
+    nodes: [],
+    edges: [],
+    datasetIds: [],
+    workflowName: 'Untitled Workflow',
+    past: [],
+    future: [],
+    customWorkflowCode: null
+  }),
+
+  setWorkflowName: (name) => set({ workflowName: name }),
+  associateDataset: (datasetId) => set(state => ({
+    datasetIds: [...new Set([...state.datasetIds, datasetId])]
+  })),
 
   snapshot: () => {
     set((state) => ({
@@ -132,13 +174,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ nodes, edges, selectedNodeId: null, customWorkflowCode: null });
   },
 
-  setGraph: (nodes, edges) => {
-    set({ nodes, edges, past: [], future: [], customWorkflowCode: null }); 
-  },
-
   onNodesChange: (changes) => {
     if (changes.some(c => c.type === 'remove')) get().snapshot();
-    
     set({
       nodes: applyNodeChanges(changes, get().nodes),
       edges: changes.some(c => c.type === 'remove') 
@@ -196,9 +233,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   setExecutionData: (data) => set({ executionData: data }),
   setExecutionMetrics: (metrics) => set({ executionMetrics: metrics }),
   setCustomWorkflowCode: (code) => set({ customWorkflowCode: code }),
-  setWorkflowName: (name) => set({ workflowName: name }), 
-  
-  // <-- ADDED IMPLEMENTATION -->
   updateNodeStatus: (nodeId, status) => {
     set({
       nodes: get().nodes.map((node) =>
