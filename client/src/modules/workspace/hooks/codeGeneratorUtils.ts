@@ -22,6 +22,8 @@ export function generateSingleNodeCode(node: Node<MLNodeData>): string {
       } else {
         return `# Load Data (Generating Synthetic Messy Dataset: 1000 rows)\nnp.random.seed(42)\ndf = pd.DataFrame({\n    'age': np.random.normal(40, 10, 1000).tolist() + [200, -50, 300],\n    'income': np.random.normal(50000, 15000, 1003).tolist(),\n    'city': np.random.choice(['NY', 'LA', 'SF', 'CHI'], 1003).tolist(),\n    'target': np.random.choice([0, 1], 1003).tolist()\n})\ndf.loc[df.sample(100).index, 'income'] = np.nan\ndf = pd.concat([df, df.sample(50)], ignore_index=True)\n\n`;
       }
+    case 'Correlation Matrix':
+      return `# EDA: Correlation Matrix\nprint(df.corr(numeric_only=True))\n\n`;
     default:
       return `# ${op}\nprint("Executing ${op}...")\n\n`;
   }
