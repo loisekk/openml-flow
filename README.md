@@ -74,7 +74,7 @@ When a new version of OpenML Flow is released, update your local instance withou
 
 ```bash
 docker-compose pull
-docker-compose up -d
+docker-compose up -d --force-recreate
 ```
 
 ---
