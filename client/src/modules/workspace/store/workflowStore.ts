@@ -1,11 +1,20 @@
 // client/src/modules/workspace/store/workflowStore.ts
 import { create } from 'zustand';
 import { Node, Edge, OnNodesChange, OnEdgesChange, OnConnect, applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
-import { MLNodeData } from '../config/nodeRegistry';
+import { MLNodeData, hydrateNodesFromRegistry } from '../config/nodeRegistry';
 
 interface GraphSnapshot {
   nodes: Node[];
   edges: Edge[];
+}
+
+/** A chart produced by a node's execution, rendered in the Node Studio Charts tab. */
+export interface ChartPayload {
+  nodeId: string;
+  type: 'heatmap' | 'bar' | 'histogram' | 'scatter' | 'line' | 'box';
+  title: string;
+  data: Record<string, any>;
+  createdAt: number;
 }
 
 interface WorkflowState {
@@ -26,6 +35,7 @@ interface WorkflowState {
   executionData: any | null; 
   executionMetrics: any | null;
   customWorkflowCode: string | null;
+  nodeCharts: Record<string, ChartPayload[]>;
   
   past: GraphSnapshot[];
   future: GraphSnapshot[];
@@ -62,6 +72,8 @@ interface WorkflowState {
   setExecutionMetrics: (metrics: any) => void;
   setCustomWorkflowCode: (code: string | null) => void;
   updateNodeStatus: (nodeId: string, status: 'idle' | 'running' | 'success' | 'error') => void;
+  setNodeChart: (nodeId: string, chart: Omit<ChartPayload, 'nodeId' | 'createdAt'>) => void;
+  clearNodeCharts: (nodeId?: string) => void;
   
   snapshot: () => void;
   undo: () => void;
@@ -94,6 +106,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   executionData: null,
   executionMetrics: null,
   customWorkflowCode: null,
+  nodeCharts: {},
   past: [],
   future: [],
 
@@ -107,7 +120,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // HYDRATION & RESET LOGIC
   setGraph: (id, nodes, edges, datasets = [], name = 'Untitled Workflow') => set({
     activeWorkflowId: id,
-    nodes,
+    // AUTO-HEAL: merges new registry params (e.g. targetColumn) into nodes
+    // loaded from OLD saved workflows. User-set values are preserved.
+    nodes: hydrateNodesFromRegistry(nodes),
     edges,
     datasetIds: datasets,
     workflowName: name,
@@ -115,6 +130,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     past: [],
     future: [],
     customWorkflowCode: null,
+    nodeCharts: {},
     selectedNodeId: null,
     activeNodeStudioId: null
   }),
@@ -128,7 +144,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     workflowName: 'Untitled Workflow',
     past: [],
     future: [],
-    customWorkflowCode: null
+    customWorkflowCode: null,
+    nodeCharts: {}
   }),
 
   setWorkflowName: (name) => set({ workflowName: name }),
@@ -171,7 +188,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   loadTemplate: (nodes, edges) => {
     get().snapshot();
-    set({ nodes, edges, selectedNodeId: null, customWorkflowCode: null });
+    // Templates can be stale too — hydrate them the same way.
+    set({ nodes: hydrateNodesFromRegistry(nodes), edges, selectedNodeId: null, customWorkflowCode: null, nodeCharts: {} });
   },
 
   onNodesChange: (changes) => {
@@ -201,10 +219,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   setActiveNodeStudio: (id) => set({ activeNodeStudioId: id }),
   deleteNode: (nodeId) => {
     get().snapshot();
+    const { [nodeId]: _removed, ...remainingCharts } = get().nodeCharts;
     set({
       nodes: get().nodes.filter(n => n.id !== nodeId),
       edges: get().edges.filter(e => e.source !== nodeId && e.target !== nodeId),
-      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId
+      selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
+      nodeCharts: remainingCharts
     });
   },
   duplicateNode: (nodeId) => {
@@ -240,6 +260,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       ),
     });
   },
+
+  // Charts: stored per node. Re-running a node replaces its chart of the same
+  // type (dedupe) so the Charts tab always shows the LATEST version.
+  setNodeChart: (nodeId, chart) => set((state) => {
+    const existing = state.nodeCharts[nodeId] ?? [];
+    const deduped = existing.filter((c) => c.type !== chart.type);
+    return { nodeCharts: { ...state.nodeCharts, [nodeId]: [...deduped, { ...chart, nodeId, createdAt: Date.now() }] } };
+  }),
+  clearNodeCharts: (nodeId) => set((state) => {
+    if (!nodeId) return { nodeCharts: {} };
+    const next = { ...state.nodeCharts };
+    delete next[nodeId];
+    return { nodeCharts: next };
+  }),
 
   setBottomPanelHeight: (h) => set({ bottomPanelHeight: Math.max(160, Math.min(h, window.innerHeight * 0.75)) }),
   toggleBottomPanel: () => set(s => ({ bottomPanelCollapsed: !s.bottomPanelCollapsed })),
