@@ -1,18 +1,30 @@
 // client/src/modules/workspace/panels/NodeStudio.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
-import { X, Play, RotateCcw, Sparkles, Send, Upload, Package, CheckCircle, XCircle } from 'lucide-react';
+import { X, Play, RotateCcw, Sparkles, Send, Upload, Package, CheckCircle, BarChart3 } from 'lucide-react';
 import { useWorkflowStore } from '../store/workflowStore';
-import { generateSingleNodeCode } from '../hooks/codeGeneratorUtils';
+import { buildNodeCode } from '../utils/codeGeneratorUtils';
 import { useAiAssistant } from '../hooks/useAiAssistant';
 import { useExecutionEngine } from '../hooks/useExecutionEngine';
+import ChartsPanel from '../canvas/components/charts/ChartsPanel';
+import ErrorBoundary from '../components/ErrorBoundary';
+
+const LOADER_NODES = ['Load CSV', 'Load JSON', 'Load Excel'];
 
 export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
-  const { nodes, updateNodeCode, updateNodeParameters } = useWorkflowStore();
+  // STABLE SELECTORS — never put `?? []` or `.map()` INSIDE a Zustand selector:
+  // a fresh array each call crashes React's snapshot cache (the black screen bug).
+  // Fallbacks happen OUTSIDE the selector, in component scope.
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const updateNodeCode = useWorkflowStore((s) => s.updateNodeCode);
+  const updateNodeParameters = useWorkflowStore((s) => s.updateNodeParameters);
+  const nodeCharts = useWorkflowStore((s) => s.nodeCharts?.[nodeId]);
+  const charts = nodeCharts ?? [];
+
   const node = nodes.find(n => n.id === nodeId);
   const { executeNode } = useExecutionEngine();
-  
-  const [activeTab, setActiveTab] = useState<'params' | 'code' | 'ai' | 'env'>('params');
+
+  const [activeTab, setActiveTab] = useState<'params' | 'code' | 'charts' | 'env' | 'ai'>('params');
   const [editorCode, setEditorCode] = useState('');
   const [installedPackages, setInstalledPackages] = useState<string[]>([]);
   const [loadingEnv, setLoadingEnv] = useState(true);
@@ -20,11 +32,26 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
   const { messages, sendMessage, isThinking } = useAiAssistant();
   const [aiInput, setAiInput] = useState('');
 
+  // Code tab shows ONLY this node's section (not the whole chain script).
+  // Empty customCode → live template. Editing stores it as this node's custom code.
   useEffect(() => {
     if (node) {
-      setEditorCode(node.data.customCode || generateSingleNodeCode(node));
+      setEditorCode(node.data.customCode?.trim() ? node.data.customCode : buildNodeCode(node));
     }
   }, [node]);
+
+  // Auto-switch to Charts ONLY when a NEW/UPDATED chart arrives during this session.
+  // First render (opening a node that already has charts) does NOT switch tabs.
+  const latestChartAt = charts.length > 0 ? Math.max(...charts.map(c => c.createdAt)) : 0;
+  const prevLatestChartAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevLatestChartAt.current === null) {
+      prevLatestChartAt.current = latestChartAt; // skip first render
+      return;
+    }
+    if (latestChartAt > prevLatestChartAt.current) setActiveTab('charts');
+    prevLatestChartAt.current = latestChartAt;
+  }, [latestChartAt]);
 
   useEffect(() => {
     if (activeTab === 'env') {
@@ -49,6 +76,8 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
 
   if (!node) return null;
 
+  const isModified = !!(node.data.customCode && node.data.customCode.trim().length > 0);
+
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
       setEditorCode(value);
@@ -56,10 +85,10 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
     }
   };
 
+  // Reset = CLEAR the custom override; the live template takes over again.
   const handleResetCode = () => {
-    const generated = generateSingleNodeCode(node);
-    setEditorCode(generated);
-    updateNodeCode(node.id, generated);
+    updateNodeCode(node.id, '');
+    setEditorCode(buildNodeCode(node));
   };
 
   const handleAiSubmit = (e: React.FormEvent) => {
@@ -80,9 +109,6 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
       const data = await res.json();
       if (data.path) {
         updateNodeParameters(node.id, 'filePath', data.path);
-        
-        // CRITICAL: Associate this dataset with the active workflow
-        // This ensures the workflow knows what data it belongs to
         useWorkflowStore.getState().associateDataset(data.filename);
       }
     } catch (err) {
@@ -101,6 +127,8 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
     });
     monaco.editor.setTheme('mlpipe-dark');
   };
+
+  const acceptType = node.data.title === 'Load CSV' ? '.csv' : node.data.title === 'Load JSON' ? '.json' : '.xlsx,.xls';
 
   return (
     <div style={{
@@ -126,7 +154,13 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '24px', padding: '0 20px', borderBottom: '1px solid #18253A', flexShrink: 0, background: '#07101F' }}>
         <div style={tabStyle(activeTab === 'params')} onClick={() => setActiveTab('params')}>Parameters</div>
-        <div style={tabStyle(activeTab === 'code')} onClick={() => setActiveTab('code')}>Code {node.data.customCode && <span style={{ color: '#8B5CF6', marginLeft: '4px', fontSize: '10px' }}>● Modified</span>}</div>
+        <div style={tabStyle(activeTab === 'code')} onClick={() => setActiveTab('code')}>Code {isModified && <span style={{ color: '#8B5CF6', marginLeft: '4px', fontSize: '10px' }}>● Modified</span>}</div>
+        <div style={tabStyle(activeTab === 'charts')} onClick={() => setActiveTab('charts')}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <BarChart3 size={13} /> Charts
+            {charts.length > 0 && <span style={{ background: '#06B6D4', color: '#050B18', borderRadius: '8px', fontSize: '10px', padding: '1px 6px', fontWeight: 700 }}>{charts.length}</span>}
+          </span>
+        </div>
         <div style={tabStyle(activeTab === 'env')} onClick={() => setActiveTab('env')}>Environment</div>
         <div style={tabStyle(activeTab === 'ai')} onClick={() => setActiveTab('ai')}>AI Assistant</div>
       </div>
@@ -135,18 +169,21 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'params' && (
           <div style={{ padding: '24px', overflowY: 'auto', background: '#0A1426' }}>
-            {node.data.title === 'Load CSV' && (
+            {LOADER_NODES.includes(node.data.title) && (
               <div style={{ marginBottom: '24px', padding: '16px', background: '#050B18', border: '1px solid #18253A', borderRadius: '8px' }}>
                 <label style={{ fontSize: '12px', color: '#9AA9BF', display: 'block', marginBottom: '12px', fontWeight: 600 }}>UPLOAD LOCAL DATASET</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <label style={{ background: '#0E1A2E', border: '1px solid #33496A', color: '#F4F7FB', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Upload size={14} /> Choose File
-                    <input type="file" accept=".csv" onChange={handleFileUpload} style={{ display: 'none' }} />
+                    <input type="file" accept={acceptType} onChange={handleFileUpload} style={{ display: 'none' }} />
                   </label>
                   <span style={{ fontSize: '12px', color: '#65758C' }}>
                     {(() => {
-                      const filePath = node.data.parameters.find((p:any) => p.name === 'filePath')?.default;
-                      if (filePath && filePath !== 'data.csv') { return `Selected: ${filePath.split('\\').pop().split('/').pop()}`; }
+                      const filePath = node.data.parameters.find((p: any) => p.name === 'filePath')?.default;
+                      if (filePath && !['data.csv', 'data.json', 'data.xlsx'].includes(filePath)) {
+                        const fileName = String(filePath).split(/[\\/]/).pop() ?? String(filePath);
+                        return `Selected: ${fileName}`;
+                      }
                       return 'No file selected';
                     })()}
                   </span>
@@ -157,10 +194,27 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
             {node.data.parameters.map((param: any) => (
               <div key={param.name} style={{ marginBottom: '18px' }}>
                 <label style={{ fontSize: '12px', color: '#9AA9BF', display: 'block', marginBottom: '6px', fontWeight: 500 }}>{param.label}</label>
-                <input defaultValue={param.default} onChange={(e) => updateNodeParameters(node.id, param.name, e.target.value)} style={{ width: '100%', background: '#050B18', border: '1px solid #18253A', color: '#F4F7FB', padding: '10px 12px', borderRadius: '6px', outline: 'none', fontSize: '14px' }} />
+                {param.type === 'select' ? (
+                  <select
+                    value={String(param.default ?? '')}
+                    onChange={(e) => updateNodeParameters(node.id, param.name, e.target.value)}
+                    style={{ width: '100%', background: '#050B18', border: '1px solid #18253A', color: '#F4F7FB', padding: '10px 12px', borderRadius: '6px', outline: 'none', fontSize: '14px' }}
+                  >
+                    {(param.options ?? []).map((opt: string) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={param.type === 'number' ? 'number' : 'text'}
+                    value={param.default ?? ''}
+                    onChange={(e) => updateNodeParameters(node.id, param.name, e.target.value)}
+                    style={{ width: '100%', background: '#050B18', border: '1px solid #18253A', color: '#F4F7FB', padding: '10px 12px', borderRadius: '6px', outline: 'none', fontSize: '14px' }}
+                  />
+                )}
               </div>
             ))}
-            
+
             <div style={{ marginTop: '24px', padding: '16px', background: '#050B18', borderRadius: '8px', border: '1px solid #18253A' }}>
               <div style={{ fontSize: '12px', color: '#65758C', marginBottom: '8px', textTransform: 'uppercase', fontWeight: 600 }}>Data Flow Context</div>
               <div style={{ fontSize: '13px', color: '#9AA9BF', lineHeight: 1.6 }}>
@@ -170,13 +224,22 @@ export default function NodeStudio({ nodeId, onClose }: { nodeId: string; onClos
             </div>
           </div>
         )}
-        
+
         {activeTab === 'code' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050B18' }}>
-            <div style={{ padding: '10px 20px', borderBottom: '1px solid #18253A', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#07101F' }}>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #18253A', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#07101F' }}>
+              <span style={{ fontSize: '11px', color: '#65758C' }}>This node's code — edits override the template. Clear all text to revert.</span>
               <button onClick={handleResetCode} style={ghostBtnStyle}><RotateCcw size={14} /> Reset Code</button>
             </div>
             <Editor height="100%" defaultLanguage="python" value={editorCode} onChange={handleEditorChange} onMount={handleEditorDidMount} options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', scrollBeyondLastLine: false, automaticLayout: true }} />
+          </div>
+        )}
+
+        {activeTab === 'charts' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: '#0A1426' }}>
+            <ErrorBoundary label="Charts">
+              <ChartsPanel nodeId={nodeId} />
+            </ErrorBoundary>
           </div>
         )}
 
