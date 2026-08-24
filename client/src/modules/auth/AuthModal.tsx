@@ -3,15 +3,18 @@ import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './authStore';
 
+const FONT = 'JetBrains Mono, monospace';
+
 export default function AuthModal() {
   const { login, register, isModalOpen, closeModal, openModal } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setSubmitting] = useState(false);
 
   // If we are on the /login route, force the modal open
   useEffect(() => {
@@ -23,25 +26,36 @@ export default function AuthModal() {
   // If the modal isn't open, render nothing.
   if (!isModalOpen) return null;
 
+  const switchTab = (next: 'login' | 'register') => {
+    setTab(next);
+    setError('');
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
-    if (tab === 'login') {
-      const success = await login(username, password);
-      if (success) {
-        closeModal();
-        navigate('/dashboard');
+    setSubmitting(true);
+    try {
+      if (tab === 'login') {
+        const err = await login(username, password); // null = success
+        if (err === null) {
+          closeModal();
+          navigate('/dashboard');
+        } else {
+          setError(err);
+        }
       } else {
-        setError('Invalid username or password.');
+        const err = await register(username, password); // null = success
+        if (err === null) {
+          alert('Account created! Please login.');
+          switchTab('login');
+        } else {
+          setError(err);
+        }
       }
-    } else {
-      const success = await register(username, password);
-      if (success) {
-        alert('Account created! Please login.');
-        setTab('login');
-      } else {
-        setError('Username already exists.');
-      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -54,21 +68,29 @@ export default function AuthModal() {
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' }} onClick={handleClose}>
-      <div style={{ background: '#161616', border: '1px solid #333', borderRadius: '12px', width: '100%', maxWidth: '400px', padding: '32px', position: 'relative', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }} onClick={(e) => e.stopPropagation()}>
-        <button onClick={handleClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#888', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
-        
-        <div style={{ display: 'flex', gap: '0', marginBottom: '24px', borderBottom: '1px solid #333' }}>
-          <button onClick={() => setTab('login')} style={{ flex: 1, padding: '12px', background: 'transparent', border: 'none', color: tab === 'login' ? '#ff8c1a' : '#666', borderBottom: tab === 'login' ? '2px solid #ff8c1a' : 'none', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace' }}>Login</button>
-          <button onClick={() => setTab('register')} style={{ flex: 1, padding: '12px', background: 'transparent', border: 'none', color: tab === 'register' ? '#ff8c1a' : '#666', borderBottom: tab === 'register' ? '2px solid #ff8c1a' : 'none', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace' }}>Register</button>
+    <div
+      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(5,11,24,0.85)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' }}
+      onClick={handleClose}
+    >
+      <div
+        style={{ background: '#0A1426', border: '1px solid #18253A', borderRadius: '12px', width: '100%', maxWidth: '400px', padding: '32px', position: 'relative', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={handleClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#65758C', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
+
+        <div style={{ display: 'flex', gap: '0', marginBottom: '24px', borderBottom: '1px solid #18253A' }}>
+          <button onClick={() => switchTab('login')} style={{ flex: 1, padding: '12px', background: 'transparent', border: 'none', color: tab === 'login' ? '#FF7A00' : '#65758C', borderBottom: tab === 'login' ? '2px solid #FF7A00' : 'none', cursor: 'pointer', fontFamily: FONT }}>Login</button>
+          <button onClick={() => switchTab('register')} style={{ flex: 1, padding: '12px', background: 'transparent', border: 'none', color: tab === 'register' ? '#FF7A00' : '#65758C', borderBottom: tab === 'register' ? '2px solid #FF7A00' : 'none', cursor: 'pointer', fontFamily: FONT }}>Register</button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h2 style={{ fontSize: '24px', margin: 0 }}>{tab === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
-          <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required style={{ padding: '12px 16px', background: '#0d0d0d', border: '1px solid #333', color: '#fff', borderRadius: '6px', fontFamily: 'JetBrains Mono, monospace', fontSize: '14px' }} />
-          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: '12px 16px', background: '#0d0d0d', border: '1px solid #333', color: '#fff', borderRadius: '6px', fontFamily: 'JetBrains Mono, monospace', fontSize: '14px' }} />
-          {error && <p style={{ color: '#ff5050', fontSize: '12px', margin: 0 }}>{error}</p>}
-          <button type="submit" style={{ padding: '12px', background: '#ff8c1a', color: '#000', fontWeight: 700, border: 'none', borderRadius: '6px', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: '14px' }}>{tab === 'login' ? 'Login' : 'Register'}</button>
+          <h2 style={{ fontSize: '24px', margin: 0, color: '#F4F7FB' }}>{tab === 'login' ? 'Welcome Back' : 'Create Account'}</h2>
+          <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required style={{ padding: '12px 16px', background: '#050B18', border: '1px solid #18253A', color: '#F4F7FB', borderRadius: '6px', fontFamily: FONT, fontSize: '14px', outline: 'none' }} />
+          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ padding: '12px 16px', background: '#050B18', border: '1px solid #18253A', color: '#F4F7FB', borderRadius: '6px', fontFamily: FONT, fontSize: '14px', outline: 'none' }} />
+          {error && <p style={{ color: '#EF4444', fontSize: '12px', margin: 0 }}>{error}</p>}
+          <button type="submit" disabled={isSubmitting} style={{ padding: '12px', background: '#FF7A00', color: '#000', fontWeight: 700, border: 'none', borderRadius: '6px', cursor: isSubmitting ? 'default' : 'pointer', fontFamily: FONT, fontSize: '14px', opacity: isSubmitting ? 0.7 : 1 }}>
+            {isSubmitting ? (tab === 'login' ? 'Logging in...' : 'Creating...') : tab === 'login' ? 'Login' : 'Register'}
+          </button>
         </form>
       </div>
     </div>
