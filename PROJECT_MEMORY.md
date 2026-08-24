@@ -61,4 +61,13 @@
 - Graph logic lives in utils/graphUtils.ts (topologicalSort, getAncestors, getDescendants, getExecutionChain) — pure, no React
 - Charts = pure JSON protocol → Recharts (zero Python deps). Renderers in canvas/components/charts/. New chart type = Python template + renderer component
 - CRITICAL: Zustand selectors must NEVER return fresh objects/arrays (`?? []` inside a selector crashes React 18 — the black-screen bug of v1.0.0)
-- Generated scripts start with a TARGET_COLUMN / TASK_TYPE config header; split nodes validate the target column at runtime
+- Generated scripts start with a TARGET_COLUMN / TASK_TYPE config header; split
+  nodes validate the target column at runtime
+
+## v1.1.2 FACTS
+- ALL frontend fetches use relative `/api` paths. ZERO `localhost:3001` hardcoding
+  allowed — release checklist greps for it.
+- authStore login/register return `string | null` (null = success, string =
+  user-readable error). Consumers must use `if (err === null)`, never truthiness.
+- Authed-fetch pattern (copy for all future authed calls): `res.ok` check →
+  Array.isArray/type guard on body → handleAuthFailure (401/403 → logout).
