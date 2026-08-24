@@ -13,7 +13,7 @@ import '../dashboard/Dashboard.css';
 const Settings = () => {
   const navigate = useNavigate();
   const { token, logout } = useAuthStore();
-  const { providers, fetchProviders, addProvider, activateProvider } = useSettingsStore();
+  const { providers, isLoading: loadingProviders, error: providersError, fetchProviders, addProvider, activateProvider } = useSettingsStore();
   
   const [activeSettingsTab, setActiveSettingsTab] = useState('environment');
   
@@ -31,6 +31,8 @@ const Settings = () => {
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('gpt-3.5-turbo');
+  const [addingProvider, setAddingProvider] = useState(false);
+  const [providerMsg, setProviderMsg] = useState('');
 
   const fetchPackages = async () => {
     setLoadingPkgs(true);
@@ -78,8 +80,17 @@ const Settings = () => {
 
   const handleAddProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addProvider(token!, { name, baseUrl, apiKey, model, isActive: providers.length === 0 });
-    setName(''); setApiKey('');
+    if (!token) { setProviderMsg('✕ You must be logged in to add a provider.'); return; }
+    setAddingProvider(true);
+    setProviderMsg('');
+    const ok = await addProvider(token, { name, baseUrl, apiKey, model, isActive: providers.length === 0 });
+    if (ok) {
+      setName(''); setApiKey('');
+      setProviderMsg('✓ Provider added successfully.');
+    } else {
+      setProviderMsg('✕ Failed to add provider — see the error in the Connected Providers panel.');
+    }
+    setAddingProvider(false);
   };
 
   // Define categories for known core packages
@@ -387,15 +398,28 @@ const Settings = () => {
                         <label style={labelStyle}>Default Model</label>
                         <input value={model} onChange={e => setModel(e.target.value)} placeholder="gpt-3.5-turbo / llama3" style={inputStyle} required />
                       </div>
-                      <button type="submit" className="dash-btn-primary"><Plus size={14} /> Add Provider</button>
+                      <button type="submit" className="dash-btn-primary" disabled={addingProvider}>
+                        {addingProvider ? 'Adding...' : <><Plus size={14} /> Add Provider</>}
+                      </button>
                     </form>
+                    {providerMsg && (
+                      <div style={{ padding: '0 20px 16px', fontSize: '13px', color: providerMsg.startsWith('✓') ? 'var(--success)' : '#EF4444' }}>
+                        {providerMsg}
+                      </div>
+                    )}
                   </div>
 
                   {/* Provider List */}
                   <div className="dash-panel">
                     <div className="dash-panel-header"><h3 style={{ margin: 0, fontSize: '16px' }}>Connected Providers</h3></div>
                     <div style={{ padding: '20px' }}>
-                      {providers.length === 0 ? (
+                      {loadingProviders ? (
+                        <span style={{ color: 'var(--text-muted)' }}>Loading providers...</span>
+                      ) : providersError ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#EF4444', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '6px', padding: '12px', fontSize: '13px' }}>
+                          <AlertTriangle size={16} /> {providersError}
+                        </div>
+                      ) : providers.length === 0 ? (
                         <span style={{ color: 'var(--text-muted)' }}>No providers configured yet.</span>
                       ) : (
                         providers.map(p => (
