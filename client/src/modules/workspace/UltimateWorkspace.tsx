@@ -7,6 +7,7 @@ import BottomPanel from './panels/BottomPanel';
 import EvaluationsPanel from './panels/EvaluationsPanel';
 import AIAssistantDrawer from './panels/AIAssistantDrawer';
 import NodeStudio from './panels/NodeStudio';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useWorkflowStore } from './store/workflowStore';
 import { useAuthStore } from '../auth/authStore'; // <-- IMPORT AUTH
 import { useExecutionEngine } from './hooks/useExecutionEngine';
@@ -365,7 +366,11 @@ const UltimateWorkspace = () => {
           {!inspectorCollapsed ? (
             <>
               <div style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0 }} onMouseDown={startHResize} title="Drag to resize" />
-              <div style={{ width: inspectorWidth, flexShrink: 0 }}><InspectorPanel /></div>
+              <div style={{ width: inspectorWidth, flexShrink: 0 }}>
+                <ErrorBoundary label="Inspector">
+                  <InspectorPanel />
+                </ErrorBoundary>
+              </div>
             </>
           ) : (
             <button onClick={toggleInspector} style={reopenBtnStyle} title="Open Inspector (⌘⇧I)"><PanelRightOpen size={16} /></button>
@@ -375,7 +380,11 @@ const UltimateWorkspace = () => {
         {!bottomPanelCollapsed ? (
           <>
             <div style={{ height: 4, cursor: 'row-resize', background: 'transparent', flexShrink: 0 }} onMouseDown={startVResize} onDoubleClick={cycleBottomPanelHeight} title="Drag to resize" />
-            <div style={{ height: bottomPanelHeight, flexShrink: 0, overflow: 'hidden' }}><BottomPanel onCollapse={toggleBottomPanel} /></div>
+            <div style={{ height: bottomPanelHeight, flexShrink: 0, overflow: 'hidden' }}>
+              <ErrorBoundary label="Console">
+                <BottomPanel onCollapse={toggleBottomPanel} />
+              </ErrorBoundary>
+            </div>
           </>
         ) : (
           <div style={{ height: 32, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
@@ -395,11 +404,17 @@ const UltimateWorkspace = () => {
       {aiAssistantOpen && (
         <>
           <div style={{ width: 4, cursor: 'col-resize', background: 'transparent', position: 'absolute', right: aiAssistantWidth, top: 120, bottom: 32, zIndex: 1001 }} onMouseDown={startAIResize} />
-          <AIAssistantDrawer onClose={toggleAIAssistant} width={aiAssistantWidth} />
+          <ErrorBoundary label="AI Assistant">
+            <AIAssistantDrawer onClose={toggleAIAssistant} width={aiAssistantWidth} />
+          </ErrorBoundary>
         </>
       )}
 
-      {activeNodeStudioId && <NodeStudio nodeId={activeNodeStudioId} onClose={() => setActiveNodeStudio(null)} />}
+      {activeNodeStudioId && (
+        <ErrorBoundary label="Node Studio" onClose={() => setActiveNodeStudio(null)}>
+          <NodeStudio nodeId={activeNodeStudioId} onClose={() => setActiveNodeStudio(null)} />
+        </ErrorBoundary>
+      )}
     </div>
   );
 };
