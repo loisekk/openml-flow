@@ -18,8 +18,7 @@ from pydantic import BaseModel
 import sqlite3
 from jose import JWTError, jwt # type: ignore
 
-# Make sure to run: pip install openai
-from openai import OpenAI 
+from openai import OpenAI
 
 # CRITICAL WINDOWS FIX: Force ProactorEventLoop so asyncio supports subprocesses on Windows
 if sys.platform == "win32":
@@ -211,15 +210,17 @@ async def stream_run(run_id: str, request: Request):
         try:
             def run_process():
                 return subprocess.Popen(
-                    [sys.executable, temp_file_path], # Use sys.executable for consistency
+                    [sys.executable, temp_file_path],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    # Force unbuffered child process -> reliable realtime streaming
+                    env={**os.environ, "PYTHONUNBUFFERED": "1"}
                 )
-            
+
             process = await asyncio.to_thread(run_process)
-            
+
             if process.stdout is None or process.stderr is None:
                 raise RuntimeError("Failed to capture process output streams.")
 
@@ -230,17 +231,18 @@ async def stream_run(run_id: str, request: Request):
                 output = line.strip()
                 if output:
                     yield f"data: {json.dumps(output)}\n\n"
-            
+
             return_code = await asyncio.to_thread(process.wait)
-            
+
+            # Stream stderr line-by-line (NOT one giant blob)
             stderr_data = await asyncio.to_thread(process.stderr.read)
             if stderr_data:
-                err_output = stderr_data.strip()
-                if err_output:
-                    yield f"data: {json.dumps(f'[STDERR] {err_output}')}\n\n"
+                for err_line in stderr_data.strip().splitlines():
+                    if err_line.strip():
+                        yield f"data: {json.dumps(f'[STDERR] {err_line}')}\n\n"
 
             yield f"event: done\ndata: {json.dumps(f'Process finished with exit code {return_code}.')}\n\n"
-            
+
         except Exception as e:
             yield f"data: {json.dumps(f'[ERROR] {str(e)}')}\n\n"
             yield f"event: done\ndata: {json.dumps('Execution failed.')}\n\n"
@@ -262,7 +264,7 @@ def get_providers(user = Depends(get_current_user), db = Depends(get_db)):
 def add_provider(provider: AIProvider, user = Depends(get_current_user), db = Depends(get_db)):
     if provider.isActive:
         db.execute("UPDATE ai_providers SET is_active = 0 WHERE user_id = ?", (user["id"],))
-    
+
     cursor = db.execute(
         "INSERT INTO ai_providers (user_id, name, base_url, api_key, model, is_active) VALUES (?, ?, ?, ?, ?, ?)",
         (user["id"], provider.name, provider.baseUrl, provider.apiKey, provider.model, provider.isActive)
@@ -283,27 +285,27 @@ def delete_provider(provider_id: int, user = Depends(get_current_user), db = Dep
     db.commit()
     return {"message": "Provider deleted"}
 
-# --- Upgraded AI Gateway ---
+# --- AI Gateway ---
 @app.post("/api/ai/chat")
 def ai_chat(req: AIRequest, user = Depends(get_current_user), db = Depends(get_db)):
     provider = db.execute("SELECT * FROM ai_providers WHERE user_id = ? AND is_active = 1", (user["id"],)).fetchone()
-    
+
     if not provider:
         return {"response": "No active AI provider configured. Please go to Settings → AI Providers to add your API key or local LLM."}
-    
+
     try:
         client = OpenAI(
             api_key=provider["api_key"],
             base_url=provider["base_url"]
         )
-        
+
         system_prompt = (
             "You are an expert ML Assistant integrated into Open-MLPipe, a visual ML pipeline builder. "
             "The user has built a workflow. Answer their question concisely based on the workflow context provided. "
             "Use markdown for code blocks if necessary.\n\n"
             f"Workflow Context:\n{req.context}"
         )
-        
+
         response = client.chat.completions.create(
             model=provider["model"],
             messages=[
@@ -327,7 +329,6 @@ def get_env_info():
 @app.get("/api/environment/packages")
 def get_packages():
     try:
-        # Uses pip's JSON output for reliable parsing
         result = subprocess.run([sys.executable, "-m", "pip", "list", "--format=json"], capture_output=True, text=True)
         packages = json.loads(result.stdout)
         return {"packages": packages}
@@ -340,7 +341,6 @@ class PackageInstall(BaseModel):
 @app.post("/api/environment/install")
 def install_package(req: PackageInstall):
     try:
-        # Safely install using the exact python executable running the server
         result = subprocess.run([sys.executable, "-m", "pip", "install", req.package], capture_output=True, text=True)
         if result.returncode == 0:
             return {"success": True, "output": result.stdout}
