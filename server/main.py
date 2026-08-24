@@ -18,7 +18,14 @@ from pydantic import BaseModel
 import sqlite3
 from jose import JWTError, jwt # type: ignore
 
-from openai import OpenAI
+# AI Gateway (BYOK provider logic — see ai_gateway.py)
+from ai_gateway import (
+    AIGatewayError,
+    chat_with_provider,
+    normalize_base_url,
+    test_provider_connection,
+    validate_provider_fields,
+)
 
 # CRITICAL WINDOWS FIX: Force ProactorEventLoop so asyncio supports subprocesses on Windows
 if sys.platform == "win32":
@@ -262,15 +269,36 @@ def get_providers(user = Depends(get_current_user), db = Depends(get_db)):
 
 @app.post("/api/ai/providers")
 def add_provider(provider: AIProvider, user = Depends(get_current_user), db = Depends(get_db)):
+    err = validate_provider_fields(provider.name, provider.baseUrl, provider.apiKey, provider.model)
+    if err:
+        raise HTTPException(status_code=422, detail=err)
+    base_url = normalize_base_url(provider.baseUrl)
     if provider.isActive:
         db.execute("UPDATE ai_providers SET is_active = 0 WHERE user_id = ?", (user["id"],))
-
     cursor = db.execute(
         "INSERT INTO ai_providers (user_id, name, base_url, api_key, model, is_active) VALUES (?, ?, ?, ?, ?, ?)",
-        (user["id"], provider.name, provider.baseUrl, provider.apiKey, provider.model, provider.isActive)
+        (user["id"], provider.name.strip(), base_url, provider.apiKey.strip(), provider.model.strip(), provider.isActive)
     )
     db.commit()
-    return {"id": cursor.lastrowid, "message": "Provider added"}
+    return {"id": cursor.lastrowid, "message": "Provider added", "baseUrl": base_url}
+
+class ProviderTest(BaseModel):
+    baseUrl: str
+    apiKey: str
+    model: str
+
+@app.post("/api/ai/providers/test")
+def test_provider(test: ProviderTest, user = Depends(get_current_user)):
+    """Cheap credential check — validates a provider BEFORE it is saved."""
+    return test_provider_connection(test.baseUrl, test.apiKey, test.model)
+
+@app.post("/api/ai/providers/{provider_id}/test")
+def test_saved_provider(provider_id: int, user = Depends(get_current_user), db = Depends(get_db)):
+    """Tests the SAVED credentials of an existing provider. Never returns the key."""
+    provider = db.execute("SELECT * FROM ai_providers WHERE id = ? AND user_id = ?", (provider_id, user["id"])).fetchone()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return test_provider_connection(provider["base_url"], provider["api_key"], provider["model"])
 
 @app.post("/api/ai/providers/{provider_id}/activate")
 def activate_provider(provider_id: int, user = Depends(get_current_user), db = Depends(get_db)):
@@ -289,34 +317,19 @@ def delete_provider(provider_id: int, user = Depends(get_current_user), db = Dep
 @app.post("/api/ai/chat")
 def ai_chat(req: AIRequest, user = Depends(get_current_user), db = Depends(get_db)):
     provider = db.execute("SELECT * FROM ai_providers WHERE user_id = ? AND is_active = 1", (user["id"],)).fetchone()
-
     if not provider:
         return {"response": "No active AI provider configured. Please go to Settings → AI Providers to add your API key or local LLM."}
-
+    system_prompt = (
+        "You are an expert ML Assistant integrated into Open-MLPipe, a visual ML pipeline builder. "
+        "The user has built a workflow. Answer their question concisely based on the workflow context provided. "
+        "Use markdown for code blocks if necessary.\n\n"
+        f"Workflow Context:\n{req.context}"
+    )
     try:
-        client = OpenAI(
-            api_key=provider["api_key"],
-            base_url=provider["base_url"]
-        )
-
-        system_prompt = (
-            "You are an expert ML Assistant integrated into Open-MLPipe, a visual ML pipeline builder. "
-            "The user has built a workflow. Answer their question concisely based on the workflow context provided. "
-            "Use markdown for code blocks if necessary.\n\n"
-            f"Workflow Context:\n{req.context}"
-        )
-
-        response = client.chat.completions.create(
-            model=provider["model"],
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": req.prompt}
-            ],
-            max_tokens=500
-        )
-        return {"response": response.choices[0].message.content}
-    except Exception as e:
-        return {"response": f"AI Gateway Error: {str(e)}"}
+        reply = chat_with_provider(provider, req.prompt, system_prompt)
+        return {"response": reply}
+    except AIGatewayError as e:
+        return {"response": f"❌ AI Gateway ({provider['name']}): {e}"}
 
 # --- Python Environment Manager ---
 @app.get("/api/environment/info")
