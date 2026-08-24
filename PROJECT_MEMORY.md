@@ -54,3 +54,11 @@
 *   v1.2: Integrated WebSocket terminal.
 *   v1.3: Live `psutil` CPU/RAM telemetry.
 *   v1.4: EDA Charts (histograms/correlation) in Node Studio Data Profile.
+
+## v1.1.0 ARCHITECTURE FACTS
+- stdout protocol markers: `__MLPIPE_NODE__` (beacon), `__MLPIPE_DATA__`, `__MLPIPE_METRICS__`, `__MLPIPE_CHART__` — all intercepted in useExecutionEngine.ts; never printed raw
+- Codegen single source of truth: utils/codeGeneratorUtils.ts. hooks/useCodeGenerator.ts is a thin reactive wrapper. NEVER duplicate node templates elsewhere
+- Graph logic lives in utils/graphUtils.ts (topologicalSort, getAncestors, getDescendants, getExecutionChain) — pure, no React
+- Charts = pure JSON protocol → Recharts (zero Python deps). Renderers in canvas/components/charts/. New chart type = Python template + renderer component
+- CRITICAL: Zustand selectors must NEVER return fresh objects/arrays (`?? []` inside a selector crashes React 18 — the black-screen bug of v1.0.0)
+- Generated scripts start with a TARGET_COLUMN / TASK_TYPE config header; split nodes validate the target column at runtime
