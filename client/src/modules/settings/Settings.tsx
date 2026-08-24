@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Home, Workflow, LayoutTemplate, Download, Database, Table2, Brain, Box,
   Rocket, ScrollText, AlertTriangle, KeyRound, Lock, Globe, Settings as SettingsIcon,
-  Search, Bell, Cpu, Plus, CheckCircle, Package, Terminal, Upload, ChevronDown, ChevronRight
+  Search, Bell, Cpu, Plus, CheckCircle, Package, Terminal, Upload, ChevronDown, ChevronRight,
+  Trash2, Zap
 } from 'lucide-react';
 import { useAuthStore } from '../auth/authStore';
 import { useSettingsStore } from './useSettingsStore';
@@ -13,7 +14,7 @@ import '../dashboard/Dashboard.css';
 const Settings = () => {
   const navigate = useNavigate();
   const { token, logout } = useAuthStore();
-  const { providers, isLoading: loadingProviders, error: providersError, fetchProviders, addProvider, activateProvider } = useSettingsStore();
+  const { providers, isLoading: loadingProviders, error: providersError, fetchProviders, addProvider, activateProvider, testProvider, testProviderById, deleteProvider } = useSettingsStore();
   
   const [activeSettingsTab, setActiveSettingsTab] = useState('environment');
   
@@ -33,6 +34,10 @@ const Settings = () => {
   const [model, setModel] = useState('gpt-3.5-turbo');
   const [addingProvider, setAddingProvider] = useState(false);
   const [providerMsg, setProviderMsg] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testingId, setTestingId] = useState<number | null>(null);
+  const [rowTestResults, setRowTestResults] = useState<Record<number, { success: boolean; message: string }>>({});
 
   const fetchPackages = async () => {
     setLoadingPkgs(true);
@@ -83,14 +88,39 @@ const Settings = () => {
     if (!token) { setProviderMsg('✕ You must be logged in to add a provider.'); return; }
     setAddingProvider(true);
     setProviderMsg('');
-    const ok = await addProvider(token, { name, baseUrl, apiKey, model, isActive: providers.length === 0 });
-    if (ok) {
-      setName(''); setApiKey('');
-      setProviderMsg('✓ Provider added successfully.');
-    } else {
+    const newId = await addProvider(token, { name, baseUrl, apiKey, model, isActive: providers.length === 0 });
+    if (newId === null) {
       setProviderMsg('✕ Failed to add provider — see the error in the Connected Providers panel.');
+    } else {
+      // Verify the SAVED provider (not the form) — closes the form-vs-database gap
+      const result = await testProviderById(token, newId);
+      if (result.success) {
+        setName(''); setApiKey('');
+        setProviderMsg('✓ Provider added and verified — the SAVED credentials connect successfully.');
+      } else {
+        setProviderMsg(`⚠ Provider saved, but its stored credentials FAILED the connection test: ${result.message} — delete it and re-add with the correct key.`);
+      }
     }
     setAddingProvider(false);
+  };
+
+  const handleTestSavedProvider = async (id: number) => {
+    if (!token) return;
+    setTestingId(id);
+    setRowTestResults(prev => { const next = { ...prev }; delete next[id]; return next; });
+    const result = await testProviderById(token, id);
+    setRowTestResults(prev => ({ ...prev, [id]: result }));
+    setTestingId(null);
+  };
+
+  const handleTestProvider = async () => {
+    if (!token) { setTestResult({ success: false, message: 'You must be logged in.' }); return; }
+    setTesting(true);
+    setTestResult(null);
+    const result = await testProvider(token, baseUrl, apiKey, model);
+    setTestResult(result);
+    if (result.baseUrl && result.baseUrl !== baseUrl) setBaseUrl(result.baseUrl); // auto-fix normalized URL
+    setTesting(false);
   };
 
   // Define categories for known core packages
@@ -396,11 +426,21 @@ const Settings = () => {
                       </div>
                       <div>
                         <label style={labelStyle}>Default Model</label>
-                        <input value={model} onChange={e => setModel(e.target.value)} placeholder="gpt-3.5-turbo / llama3" style={inputStyle} required />
+                        <input value={model} onChange={e => setModel(e.target.value)} placeholder="openai/gpt-4o-mini — copy the exact ID, no spaces" style={inputStyle} required />
                       </div>
-                      <button type="submit" className="dash-btn-primary" disabled={addingProvider}>
-                        {addingProvider ? 'Adding...' : <><Plus size={14} /> Add Provider</>}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button type="submit" className="dash-btn-primary" disabled={addingProvider} style={{ flex: 1 }}>
+                          {addingProvider ? 'Adding...' : <><Plus size={14} /> Add Provider</>}
+                        </button>
+                        <button type="button" className="dash-btn-secondary" onClick={handleTestProvider} disabled={testing} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                          {testing ? 'Testing...' : <><Zap size={14} /> Test Connection</>}
+                        </button>
+                      </div>
+                      {testResult && (
+                        <div style={{ fontSize: '12px', color: testResult.success ? 'var(--success)' : '#EF4444', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '6px', padding: '10px' }}>
+                          {testResult.message}
+                        </div>
+                      )}
                     </form>
                     {providerMsg && (
                       <div style={{ padding: '0 20px 16px', fontSize: '13px', color: providerMsg.startsWith('✓') ? 'var(--success)' : '#EF4444' }}>
@@ -424,16 +464,32 @@ const Settings = () => {
                       ) : (
                         providers.map(p => (
                           <div key={p.id} className={`dash-provider-row ${p.isActive ? 'dash-provider-active' : ''}`}>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {p.name} 
-                                {p.isActive && <span style={{ color: 'var(--success)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} /> Active</span>}
+                                {p.name}
+                                {p.isActive && <span style={{ color: 'var(--success)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} /> Active — used by AI Assistant</span>}
                               </div>
                               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{p.baseUrl} | Model: {p.model}</div>
+                              {rowTestResults[p.id] && (
+                                <div style={{ fontSize: '11px', marginTop: '6px', color: rowTestResults[p.id].success ? 'var(--success)' : '#EF4444', whiteSpace: 'pre-wrap' }}>
+                                  {rowTestResults[p.id].success ? '✓ ' : '✕ '}{rowTestResults[p.id].message}
+                                </div>
+                              )}
                             </div>
-                            {!p.isActive && (
-                              <button className="dash-btn-secondary" onClick={() => activateProvider(token!, p.id)}>Set Active</button>
-                            )}
+                            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                              <button className="dash-btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                                onClick={() => handleTestSavedProvider(p.id)} disabled={testingId === p.id} title="Test the SAVED credentials">
+                                {testingId === p.id ? 'Testing...' : <><Zap size={14} /> Test</>}
+                              </button>
+                              {!p.isActive && (
+                                <button className="dash-btn-secondary" onClick={() => activateProvider(token!, p.id)}>Set Active</button>
+                              )}
+                              <button className="dash-btn-secondary" style={{ display: 'flex', alignItems: 'center' }}
+                                onClick={() => { if (window.confirm('Delete this provider?')) deleteProvider(token!, p.id); }}
+                                title="Delete provider">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
                         ))
                       )}
