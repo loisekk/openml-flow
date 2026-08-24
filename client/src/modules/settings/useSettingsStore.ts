@@ -23,8 +23,11 @@ interface SettingsState {
   isLoading: boolean;
   error: string | null;
   fetchProviders: (token: string) => Promise<void>;
-  addProvider: (token: string, data: AddProviderPayload) => Promise<boolean>;
+  addProvider: (token: string, data: AddProviderPayload) => Promise<number | null>;
   activateProvider: (token: string, id: number) => Promise<boolean>;
+  testProvider: (token: string, baseUrl: string, apiKey: string, model: string) => Promise<{ success: boolean; message: string; baseUrl?: string }>;
+  testProviderById: (token: string, id: number) => Promise<{ success: boolean; message: string }>;
+  deleteProvider: (token: string, id: number) => Promise<boolean>;
 }
 
 /**
@@ -82,6 +85,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       });
       if (!res.ok) {
         set({ error: handleAuthFailure(res.status, await extractDetail(res)) });
+        return null;
+      }
+      const created = await res.json();
+      await get().fetchProviders(token);
+      return typeof created.id === 'number' ? created.id : null;
+    } catch {
+      set({ error: 'Could not reach the local runtime.' });
+      return null;
+    }
+  },
+
+  activateProvider: async (token, id) => {
+    try {
+      const res = await fetch(`/api/ai/providers/${id}/activate`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        set({ error: handleAuthFailure(res.status, await extractDetail(res)) });
         return false;
       }
       await get().fetchProviders(token);
@@ -92,10 +114,37 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  activateProvider: async (token, id) => {
+  testProvider: async (token, baseUrl, apiKey, model) => {
     try {
-      const res = await fetch(`/api/ai/providers/${id}/activate`, {
+      const res = await fetch('/api/ai/providers/test', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ baseUrl, apiKey, model }),
+      });
+      if (!res.ok) return { success: false, message: `Test failed (HTTP ${res.status}).` };
+      return await res.json();
+    } catch {
+      return { success: false, message: 'Could not reach the local runtime.' };
+    }
+  },
+
+  testProviderById: async (token, id) => {
+    try {
+      const res = await fetch(`/api/ai/providers/${id}/test`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) return { success: false, message: `Test failed (HTTP ${res.status}).` };
+      return await res.json();
+    } catch {
+      return { success: false, message: 'Could not reach the local runtime.' };
+    }
+  },
+
+  deleteProvider: async (token, id) => {
+    try {
+      const res = await fetch(`/api/ai/providers/${id}`, {
+        method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) {
