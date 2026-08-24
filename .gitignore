@@ -76,3 +76,6 @@ Thumbs.db
 # === LOGS ===
 logs/
 *.log
+
+# === PROJECT MEMORY (local-only maintainer notes) ===
+PROJECT_MEMORY.md
