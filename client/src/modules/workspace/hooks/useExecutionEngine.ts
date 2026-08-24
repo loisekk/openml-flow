@@ -1,158 +1,237 @@
+// client/src/modules/workspace/hooks/useExecutionEngine.ts
+//
+// Execution Engine — orchestrates local Python runs via the FastAPI SSE stream.
+//
+//   executeWorkflow()  → runs the full generated script (Monaco override wins if set)
+//   executeNode(id)    → runs ONE node plus its full EDGE-BASED upstream chain
+//
+// All stdout protocol lines are intercepted and NEVER shown raw in the console:
+//   __MLPIPE_NODE__::{id, title}   → live per-node status on the canvas
+//   __MLPIPE_DATA__::{json}        → Data tab payload
+//   __MLPIPE_METRICS__::{json}     → Evaluations tab payload
+//   __MLPIPE_CHART__::{json}       → Charts tab payload (attributed to the
+//                                    currently-running node via the beacon)
+//
+// Reads store state via getState() at CALL time (no stale closures) and
+// guards against concurrent runs via isExecuting.
+
 import { useWorkflowStore } from '../store/workflowStore';
 import { useCodeGenerator } from './useCodeGenerator';
-import { generateSingleNodeCode } from './codeGeneratorUtils';
+import { generateNodeChainScript } from '../utils/codeGeneratorUtils';
+import { getExecutionChain } from '../utils/graphUtils';
 
-export const useExecutionEngine = () => {
-  const { 
-    setExecuting, addExecutionLog, clearLogs, isExecuting, 
-    setExecutionData, setExecutionMetrics, customWorkflowCode,
-    updateNodeStatus, nodes 
-  } = useWorkflowStore();
-  
-  const generatedCode = useCodeGenerator();
-  const pythonCode = customWorkflowCode || generatedCode;
+const NODE_MARKER = '__MLPIPE_NODE__::';
+const DATA_MARKER = '__MLPIPE_DATA__::';
+const METRICS_MARKER = '__MLPIPE_METRICS__::';
+const CHART_MARKER = '__MLPIPE_CHART__::';
 
-  // Execute Entire Workflow
-  const executeWorkflow = async () => {
-    if (isExecuting) return;
-    
-    clearLogs();
-    setExecutionData(null);
-    setExecutionMetrics(null);
-    setExecuting(true);
-    addExecutionLog('[INFO] Compiling graph and sending to local runtime...');
+/**
+ * Starts a run on the backend and consumes its SSE stream until completion.
+ * Resolves `true` if the process exited cleanly, `false` otherwise.
+ */
+async function runStream(code: string): Promise<boolean> {
+  const { addExecutionLog, setExecutionData, setExecutionMetrics, updateNodeStatus, setNodeChart } =
+    useWorkflowStore.getState();
 
-    try {
-      const response = await fetch('/api/run/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: pythonCode })
-      });
+  let hasError = false;
+  let finished = false;
+  let sawMarker = false;
+  let currentNodeId: string | null = null;
 
-      if (!response.ok) throw new Error('Failed to start execution run');
-      const { runId } = await response.json();
-
-      const eventSource = new EventSource(`/api/run/stream/${runId}`);
-
-      eventSource.onmessage = (event) => {
-        try {
-          const log = JSON.parse(event.data);
-          if (typeof log === 'string' && log.startsWith('__MLPIPE_DATA__::')) {
-            const jsonStr = log.replace('__MLPIPE_DATA__::', '');
-            try {
-              const data = JSON.parse(jsonStr);
-              setExecutionData(data);
-              addExecutionLog('[INFO] Data preview captured successfully.');
-            } catch (parseError) {
-              addExecutionLog('[ERROR] Failed to parse data preview JSON.');
-            }
-          } else if (typeof log === 'string' && log.startsWith('__MLPIPE_METRICS__::')) {
-            const jsonStr = log.replace('__MLPIPE_METRICS__::', '');
-            try {
-              const metrics = JSON.parse(jsonStr);
-              const existingMetrics = useWorkflowStore.getState().executionMetrics || {};
-              setExecutionMetrics({ ...existingMetrics, ...metrics });
-              addExecutionLog('[INFO] ML Metrics captured successfully.');
-            } catch (parseError) {
-              addExecutionLog('[ERROR] Failed to parse metrics JSON.');
-            }
-          } else {
-            addExecutionLog(log);
-          }
-        } catch (e) {
-          addExecutionLog(event.data);
-        }
-      };
-
-      eventSource.addEventListener('done', (event: any) => {
-        try {
-          const log = JSON.parse(event.data);
-          addExecutionLog(log);
-        } catch (e) {
-          addExecutionLog('Execution finished.');
-        }
-        eventSource.close();
-        setExecuting(false);
-      });
-
-      eventSource.onerror = () => {
-        addExecutionLog('[ERROR] Connection to local runtime closed.');
-        eventSource.close();
-        setExecuting(false);
-      };
-
-    } catch (error: any) {
-      addExecutionLog(`[ERROR] ${error.message}`);
-      setExecuting(false);
+  const resolveCurrentNode = (status: 'success' | 'error') => {
+    if (currentNodeId) {
+      updateNodeStatus(currentNodeId, status);
+      currentNodeId = null;
     }
   };
 
-  // Execute Single Node (For Node Studio "Run Node" Button)
-  // This acts like Jupyter: it runs the selected node AND all nodes before it!
-  const executeNode = async (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
+  const response = await fetch('/api/run/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new Error('Failed to start execution run');
+  const { runId } = await response.json();
 
-    updateNodeStatus(nodeId, 'running');
-    addExecutionLog(`[INFO] Executing Node: ${node.data.title}...`);
+  const eventSource = new EventSource(`/api/run/stream/${runId}`);
 
-    // 1. Find the index of the selected node
-    const nodeIndex = nodes.findIndex(n => n.id === nodeId);
-    
-    // 2. Gather all nodes from index 0 up to the selected node
-    const upstreamNodes = nodes.slice(0, nodeIndex + 1);
+  eventSource.onmessage = (event) => {
+    let log: unknown;
+    try {
+      log = JSON.parse(event.data);
+    } catch {
+      addExecutionLog(event.data);
+      return;
+    }
+    if (typeof log !== 'string') {
+      addExecutionLog(String(log));
+      return;
+    }
 
-    // 3. Generate combined code for all upstream nodes
-    let combinedNodeCode = `import pandas as pd\nimport numpy as np\n\n`;
-    upstreamNodes.forEach(n => {
-      combinedNodeCode += generateSingleNodeCode(n);
+    // 1. Node beacon → live status + clean console line
+    if (log.startsWith(NODE_MARKER)) {
+      try {
+        const meta = JSON.parse(log.slice(NODE_MARKER.length));
+        sawMarker = true;
+        resolveCurrentNode('success'); // previous section finished cleanly
+        currentNodeId = meta.id;
+        updateNodeStatus(meta.id, 'running');
+        addExecutionLog(`[INFO] ▶ Running: ${meta.title}...`);
+      } catch {
+        /* malformed marker — ignore */
+      }
+      return;
+    }
+
+    // 1.5. Chart payload → attributed to the currently-running node (via beacon)
+    if (log.startsWith(CHART_MARKER)) {
+      try {
+        const chart = JSON.parse(log.slice(CHART_MARKER.length));
+        if (currentNodeId) {
+          setNodeChart(currentNodeId, {
+            type: chart.type ?? 'bar',
+            title: chart.title ?? 'Chart',
+            data: chart,
+          });
+          addExecutionLog(`[INFO] 📊 Chart ready: ${chart.title ?? 'Chart'}`);
+        } else {
+          addExecutionLog('[WARN] Chart emitted outside a node section — skipped.');
+        }
+      } catch {
+        addExecutionLog('[ERROR] Failed to parse chart JSON.');
+      }
+      return;
+    }
+
+    // 2. Data preview payload → Data tab
+    if (log.startsWith(DATA_MARKER)) {
+      try {
+        setExecutionData(JSON.parse(log.slice(DATA_MARKER.length)));
+        addExecutionLog('[INFO] Data preview captured.');
+      } catch {
+        addExecutionLog('[ERROR] Failed to parse data preview JSON.');
+      }
+      return;
+    }
+
+    // 3. Metrics payload → Evaluations tab (merged)
+    if (log.startsWith(METRICS_MARKER)) {
+      try {
+        const metrics = JSON.parse(log.slice(METRICS_MARKER.length));
+        const existing = useWorkflowStore.getState().executionMetrics || {};
+        setExecutionMetrics({ ...existing, ...metrics });
+        addExecutionLog('[INFO] ML metrics captured.');
+      } catch {
+        addExecutionLog('[ERROR] Failed to parse metrics JSON.');
+      }
+      return;
+    }
+
+    // 4. Human-readable output (exit code decides failure, not stderr warnings)
+    addExecutionLog(log);
+    if (log.includes('[ERROR]')) hasError = true;
+  };
+
+  return new Promise<boolean>((resolve) => {
+    eventSource.addEventListener('done', (event: any) => {
+      if (finished) return;
+      finished = true;
+
+      let message = 'Execution finished.';
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        /* keep default */
+      }
+
+      const exitMatch = /exit code (\d+)/.exec(String(message));
+      if (exitMatch && exitMatch[1] !== '0') hasError = true;
+
+      addExecutionLog(message);
+
+      if (sawMarker) {
+        resolveCurrentNode(hasError ? 'error' : 'success');
+      } else {
+        useWorkflowStore.getState().nodes.forEach((n) =>
+          updateNodeStatus(n.id, hasError ? 'error' : 'success')
+        );
+      }
+
+      eventSource.close();
+      resolve(!hasError);
     });
 
+    eventSource.onerror = () => {
+      if (finished) return;
+      finished = true;
+      addExecutionLog('[ERROR] Connection to local runtime closed.');
+      resolveCurrentNode('error');
+      eventSource.close();
+      resolve(false);
+    };
+  });
+}
+
+export const useExecutionEngine = () => {
+  const isExecuting = useWorkflowStore((s) => s.isExecuting);
+  const generatedCode = useCodeGenerator();
+
+  /** Execute the ENTIRE workflow (Code panel content, or Monaco override). */
+  const executeWorkflow = async () => {
+    const state = useWorkflowStore.getState();
+    if (state.isExecuting) return;
+
+    state.clearLogs();
+    state.setExecutionData(null);
+    state.setExecutionMetrics(null);
+    state.setExecuting(true);
+    state.nodes.forEach((n) => state.updateNodeStatus(n.id, 'idle'));
+    state.addExecutionLog('[INFO] Compiling graph and sending to local runtime...');
+
+    const code = state.customWorkflowCode || generatedCode;
+
     try {
-      const response = await fetch('/api/run/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: combinedNodeCode }) // Send combined code!
-      });
-
-      if (!response.ok) throw new Error('Failed to start node execution');
-      const { runId } = await response.json();
-
-      const eventSource = new EventSource(`/api/run/stream/${runId}`);
-      let hasError = false;
-
-      eventSource.onmessage = (event) => {
-        try {
-          const log = JSON.parse(event.data);
-          addExecutionLog(log);
-          if (typeof log === 'string' && (log.includes('[STDERR]') || log.includes('[ERROR]'))) {
-            hasError = true;
-          }
-        } catch (e) {
-          addExecutionLog(event.data);
-        }
-      };
-
-      eventSource.addEventListener('done', () => {
-        if (hasError) {
-          updateNodeStatus(nodeId, 'error');
-          addExecutionLog(`[ERROR] Node "${node.data.title}" failed.`);
-        } else {
-          updateNodeStatus(nodeId, 'success');
-          addExecutionLog(`[SUCCESS] Node "${node.data.title}" executed successfully.`);
-        }
-        eventSource.close();
-      });
-
-      eventSource.onerror = () => {
-        updateNodeStatus(nodeId, 'error');
-        addExecutionLog(`[ERROR] Node "${node.data.title}" failed to connect to runtime.`);
-        eventSource.close();
-      };
-
+      await runStream(code);
     } catch (error: any) {
-      updateNodeStatus(nodeId, 'error');
-      addExecutionLog(`[ERROR] ${error.message}`);
+      state.addExecutionLog(`[ERROR] ${error.message}`);
+    } finally {
+      useWorkflowStore.getState().setExecuting(false);
+    }
+  };
+
+  /**
+   * Execute ONE node Jupyter-style: the node plus its entire upstream chain
+   * (resolved from EDGES, not canvas order) in a single script.
+   */
+  const executeNode = async (nodeId: string) => {
+    const state = useWorkflowStore.getState();
+    if (state.isExecuting) return;
+
+    const node = state.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    state.setExecuting(true);
+    state.addExecutionLog(`[INFO] Executing Node: ${node.data.title}...`);
+
+    getExecutionChain(nodeId, state.nodes, state.edges).forEach((n) =>
+      state.updateNodeStatus(n.id, 'idle')
+    );
+
+    const chainCode = generateNodeChainScript(nodeId, state.nodes, state.edges);
+
+    try {
+      const ok = await runStream(chainCode);
+      state.updateNodeStatus(nodeId, ok ? 'success' : 'error');
+      state.addExecutionLog(
+        ok
+          ? `[SUCCESS] Node "${node.data.title}" executed successfully.`
+          : `[ERROR] Node "${node.data.title}" failed.`
+      );
+    } catch (error: any) {
+      state.updateNodeStatus(nodeId, 'error');
+      state.addExecutionLog(`[ERROR] ${error.message}`);
+    } finally {
+      useWorkflowStore.getState().setExecuting(false);
     }
   };
 
