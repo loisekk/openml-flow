@@ -26,6 +26,7 @@ from ai_gateway import (
     test_provider_connection,
     validate_provider_fields,
 )
+from ai_workflow_builder import build_workflow_from_prompt
 
 # CRITICAL WINDOWS FIX: Force ProactorEventLoop so asyncio supports subprocesses on Windows
 if sys.platform == "win32":
@@ -350,6 +351,21 @@ def ai_chat(req: AIRequest, user = Depends(get_current_user), db = Depends(get_d
         return {"response": reply}
     except AIGatewayError as e:
         return {"response": f"❌ AI Gateway ({provider['name']}): {e}"}
+
+class AIBuildRequest(BaseModel):
+    prompt: str
+
+@app.post("/api/ai/build-workflow")
+def ai_build_workflow(req: AIBuildRequest, user = Depends(get_current_user), db = Depends(get_db)):
+    """Profiles the latest uploaded dataset and returns a VALIDATED AI workflow plan.
+    The AI never mutates the canvas — the frontend shows a preview modal first."""
+    provider = db.execute("SELECT * FROM ai_providers WHERE user_id = ? AND is_active = 1", (user["id"],)).fetchone()
+    if not provider:
+        raise HTTPException(status_code=400, detail="No active AI provider configured. Add one in Settings → AI Providers first.")
+    try:
+        return build_workflow_from_prompt(provider, req.prompt)
+    except AIGatewayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 # --- Python Environment Manager ---
 @app.get("/api/environment/info")
