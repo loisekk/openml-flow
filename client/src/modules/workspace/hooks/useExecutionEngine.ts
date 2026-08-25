@@ -19,11 +19,48 @@ import { useWorkflowStore } from '../store/workflowStore';
 import { useCodeGenerator } from './useCodeGenerator';
 import { generateNodeChainScript } from '../utils/codeGeneratorUtils';
 import { getExecutionChain } from '../utils/graphUtils';
+import { validatePipeline } from '../utils/pipelineValidator';
 
 const NODE_MARKER = '__MLPIPE_NODE__::';
 const DATA_MARKER = '__MLPIPE_DATA__::';
 const METRICS_MARKER = '__MLPIPE_METRICS__::';
 const CHART_MARKER = '__MLPIPE_CHART__::';
+
+/**
+ * Standalone single-node runner — used by the WorkflowNode toolbar WITHOUT
+ * subscribing to hooks, so React.memo on WorkflowNode keeps working.
+ */
+export const runNodeById = async (nodeId: string) => {
+  const state = useWorkflowStore.getState();
+  if (state.isExecuting) return;
+
+  const node = state.nodes.find((n) => n.id === nodeId);
+  if (!node) return;
+
+  state.setExecuting(true);
+  state.addExecutionLog(`[INFO] Executing Node: ${node.data.title}...`);
+
+  getExecutionChain(nodeId, state.nodes, state.edges).forEach((n) =>
+    state.updateNodeStatus(n.id, 'idle')
+  );
+
+  const chainCode = generateNodeChainScript(nodeId, state.nodes, state.edges);
+
+  try {
+    const ok = await runStream(chainCode);
+    state.updateNodeStatus(nodeId, ok ? 'success' : 'error');
+    state.addExecutionLog(
+      ok
+        ? `[SUCCESS] Node "${node.data.title}" executed successfully.`
+        : `[ERROR] Node "${node.data.title}" failed.`
+    );
+  } catch (error: any) {
+    state.updateNodeStatus(nodeId, 'error');
+    state.addExecutionLog(`[ERROR] ${error.message}`);
+  } finally {
+    useWorkflowStore.getState().setExecuting(false);
+  }
+};
 
 /**
  * Starts a run on the backend and consumes its SSE stream until completion.
@@ -152,9 +189,14 @@ async function runStream(code: string): Promise<boolean> {
       if (sawMarker) {
         resolveCurrentNode(hasError ? 'error' : 'success');
       } else {
-        useWorkflowStore.getState().nodes.forEach((n) =>
-          updateNodeStatus(n.id, hasError ? 'error' : 'success')
-        );
+        // No beacons seen: attribute the failure to the FIRST node only
+        // (never paint the whole graph red), or mark all green on success.
+        const first = useWorkflowStore.getState().nodes.find((n) => n.data.status !== undefined);
+        if (hasError && first) {
+          updateNodeStatus(first.id, 'error');
+        } else if (!hasError) {
+          useWorkflowStore.getState().nodes.forEach((n) => updateNodeStatus(n.id, 'success'));
+        }
       }
 
       eventSource.close();
@@ -184,6 +226,15 @@ export const useExecutionEngine = () => {
     state.clearLogs();
     state.setExecutionData(null);
     state.setExecutionMetrics(null);
+
+    // Pre-flight validation — cycles and disconnected nodes block execution
+    const validation = validatePipeline(state.nodes, state.edges);
+    if (!validation.valid) {
+      validation.errors.forEach((e) => state.addExecutionLog(`[VALIDATION] ${e}`));
+      state.addExecutionLog('[INFO] Execution blocked — fix the issues above and try again.');
+      return;
+    }
+
     state.setExecuting(true);
     state.nodes.forEach((n) => state.updateNodeStatus(n.id, 'idle'));
     state.addExecutionLog('[INFO] Compiling graph and sending to local runtime...');
@@ -200,39 +251,11 @@ export const useExecutionEngine = () => {
   };
 
   /**
-   * Execute ONE node Jupyter-style: the node plus its entire upstream chain
-   * (resolved from EDGES, not canvas order) in a single script.
+   * Execute ONE node Jupyter-style. Thin wrapper over the standalone
+   * runNodeById (kept for existing hook-based callers).
    */
   const executeNode = async (nodeId: string) => {
-    const state = useWorkflowStore.getState();
-    if (state.isExecuting) return;
-
-    const node = state.nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
-    state.setExecuting(true);
-    state.addExecutionLog(`[INFO] Executing Node: ${node.data.title}...`);
-
-    getExecutionChain(nodeId, state.nodes, state.edges).forEach((n) =>
-      state.updateNodeStatus(n.id, 'idle')
-    );
-
-    const chainCode = generateNodeChainScript(nodeId, state.nodes, state.edges);
-
-    try {
-      const ok = await runStream(chainCode);
-      state.updateNodeStatus(nodeId, ok ? 'success' : 'error');
-      state.addExecutionLog(
-        ok
-          ? `[SUCCESS] Node "${node.data.title}" executed successfully.`
-          : `[ERROR] Node "${node.data.title}" failed.`
-      );
-    } catch (error: any) {
-      state.updateNodeStatus(nodeId, 'error');
-      state.addExecutionLog(`[ERROR] ${error.message}`);
-    } finally {
-      useWorkflowStore.getState().setExecuting(false);
-    }
+    return runNodeById(nodeId);
   };
 
   return { executeWorkflow, executeNode, isExecuting };
