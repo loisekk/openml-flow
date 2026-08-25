@@ -45,6 +45,7 @@ interface WorkflowState {
   customWorkflowCode: string | null;
   nodeCharts: Record<string, ChartPayload[]>;
   aiProposal: AiWorkflowProposal | null;
+  outputs: string[];
   
   past: GraphSnapshot[];
   future: GraphSnapshot[];
@@ -86,6 +87,7 @@ interface WorkflowState {
   updateNoteText: (nodeId: string, text: string) => void;
   setAiProposal: (p: AiWorkflowProposal) => void;
   clearAiProposal: () => void;
+  addOutput: (filename: string) => void;
 
   snapshot: () => void;
   undo: () => void;
@@ -120,6 +122,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   customWorkflowCode: null,
   nodeCharts: {},
   aiProposal: null,
+  outputs: [],
   past: [],
   future: [],
 
@@ -145,6 +148,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     customWorkflowCode: null,
     nodeCharts: {},
     aiProposal: null,
+    outputs: [],
     selectedNodeId: null,
     activeNodeStudioId: null
   }),
@@ -160,7 +164,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     future: [],
     customWorkflowCode: null,
     nodeCharts: {},
-    aiProposal: null
+    aiProposal: null,
+    outputs: []
   }),
 
   setWorkflowName: (name) => set({ workflowName: name }),
@@ -204,7 +209,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   loadTemplate: (nodes, edges) => {
     get().snapshot();
     // Templates can be stale too — hydrate them the same way.
-    set({ nodes: hydrateNodesFromRegistry(nodes), edges, selectedNodeId: null, customWorkflowCode: null, nodeCharts: {}, aiProposal: null });
+    set({ nodes: hydrateNodesFromRegistry(nodes), edges, selectedNodeId: null, customWorkflowCode: null, nodeCharts: {}, aiProposal: null, outputs: [] });
   },
 
   onNodesChange: (changes) => {
@@ -300,6 +305,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
   setAiProposal: (p) => set({ aiProposal: p }),
   clearAiProposal: () => set({ aiProposal: null }),
+  addOutput: (filename) => set((state) => ({
+    outputs: [...new Set([...state.outputs, filename])]
+  })),
 
   setBottomPanelHeight: (h) => set({ bottomPanelHeight: Math.max(160, Math.min(h, window.innerHeight * 0.75)) }),
   toggleBottomPanel: () => set(s => ({ bottomPanelCollapsed: !s.bottomPanelCollapsed })),
