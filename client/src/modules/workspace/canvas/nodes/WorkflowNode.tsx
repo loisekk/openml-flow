@@ -2,6 +2,8 @@ import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkflowStore } from '../../store/workflowStore';
+import { runNodeById } from '../../hooks/useExecutionEngine';
+import './nodeAnimations.css';
 
 const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
   const { deleteNode, duplicateNode, setSelectedNodeId } = useWorkflowStore();
@@ -13,28 +15,28 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
       case 'running':
         return { border: '2px solid #FF8A00', boxShadow: '0 0 16px rgba(255, 138, 0, 0.6)', animation: 'pulse-orange 1.5s infinite' };
       case 'success':
-        return { border: '2px solid #22C55E', boxShadow: '0 0 12px rgba(34, 197, 94, 0.4)' };
+        return { border: '2px solid #22C55E', boxShadow: '0 0 12px rgba(34, 197, 94, 0.4)', animation: 'success-flash 600ms ease-out' };
       case 'error':
-        return { border: '2px solid #EF4444', boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)' };
+        return { border: '2px solid #EF4444', boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)', animation: 'error-shake 350ms ease-in-out' };
       default:
-        return { 
-          border: selected ? `1px solid ${data.color}` : '1px solid rgba(255,255,255,0.08)', 
-          boxShadow: selected ? `0 0 15px ${data.color}40` : '0 2px 8px rgba(0,0,0,0.3)' 
+        return {
+          border: selected ? `1px solid ${data.color}` : '1px solid rgba(255,255,255,0.08)',
+          boxShadow: selected ? `0 0 15px ${data.color}40` : '0 2px 8px rgba(0,0,0,0.3)'
         };
     }
   };
 
   return (
-    <div 
+    <div
       style={{ position: 'relative' }}
       onClick={() => setSelectedNodeId(id)}
     >
       {/* Floating Toolbar */}
       <AnimatePresence>
         {selected && (
-          <motion.div 
-            initial={{ opacity: 0, y: -5, scale: 0.95 }} 
-            animate={{ opacity: 1, y: 0, scale: 1 }} 
+          <motion.div
+            initial={{ opacity: 0, y: -5, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -5, scale: 0.95 }}
             transition={{ duration: 0.15 }}
             style={{
@@ -52,9 +54,14 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
               boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
             }}
           >
-            <button style={btnStyle} title="Run">▶</button>
+            <button
+              style={{ ...btnStyle, color: status === 'running' ? '#FF8A00' : '#22C55E' }}
+              title="Run"
+              onClick={() => runNodeById(id)}
+              disabled={status === 'running'}
+            >▶</button>
             <button style={btnStyle} title="Configure" onClick={() => setSelectedNodeId(id)}>⚙</button>
-            <button style={btnStyle} title="View Code">📄</button>
+            <button style={btnStyle} title="View Code" onClick={() => useWorkflowStore.getState().setActiveNodeStudio(id)}>📄</button>
             <button style={btnStyle} title="Duplicate" onClick={() => duplicateNode(id)}>⧉</button>
             <button style={{...btnStyle, color: '#EF4444'}} title="Delete" onClick={() => deleteNode(id)}>🗑</button>
           </motion.div>
@@ -63,11 +70,11 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
 
       {/* Node Body */}
       <div style={{
-        background: '#101C30', 
+        background: '#101C30',
         ...getStatusStyles(),
         borderRadius: '8px',
         width: '220px',
-        transition: 'border-color 0.2s, box-shadow 0.2s', 
+        transition: 'border-color 0.2s, box-shadow 0.2s',
         overflow: 'hidden'
       }}>
         {/* Header */}
@@ -99,13 +106,13 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
         </div>
 
         {/* Body / Stats */}
-        <div style={{ padding: '10px 12px', fontSize: '11px', color: '#94A3B8' }}>
+        <div style={{ padding: '10px 12px', fontSize: '11px', color: '#94A3B8', minHeight: '38px' }}>
           {status === 'running' ? (
             <div>Executing...</div>
           ) : status === 'success' ? (
             <div style={{ color: '#22C55E' }}>✓ Executed successfully</div>
           ) : status === 'error' ? (
-            <div style={{ color: '#EF4444' }}>✕ Execution failed</div>
+            <div style={{ color: '#EF4444' }}>✕ Execution failed — open the node for details</div>
           ) : (
             <div>{data.description}</div>
           )}
@@ -113,7 +120,7 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
       </div>
 
       {/* Handles */}
-      {data.inputs.map((input: string, i: number) => (
+      {(data.inputs || []).map((input: string, i: number) => (
         <Handle
           key={input}
           type="target"
@@ -128,8 +135,8 @@ const WorkflowNode = ({ id, data, selected }: NodeProps<any>) => {
           }}
         />
       ))}
-      
-      {data.outputs.map((output: string, i: number) => (
+
+      {(data.outputs || []).map((output: string, i: number) => (
         <Handle
           key={output}
           type="source"
