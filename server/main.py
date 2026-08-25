@@ -175,8 +175,26 @@ def list_datasets():
 # --- Workflow Routes ---
 @app.get("/api/workflows")
 def list_workflows(user = Depends(get_current_user), db = Depends(get_db)):
-    workflows = db.execute("SELECT id, name, created_at, updated_at FROM workflows WHERE user_id = ? ORDER BY updated_at DESC", (user["id"],)).fetchall()
-    return [{"id": wf["id"], "name": wf["name"], "created_at": wf["created_at"], "updated_at": wf["updated_at"]} for wf in workflows]
+    workflows = db.execute("SELECT id, name, graph_data, created_at, updated_at FROM workflows WHERE user_id = ? ORDER BY updated_at DESC", (user["id"],)).fetchall()
+    result = []
+    for wf in workflows:
+        node_count = 0
+        try:
+            graph = json.loads(wf["graph_data"] or "{}")
+            node_count = len(graph.get("nodes", []))
+        except (ValueError, TypeError):
+            pass
+        result.append({"id": wf["id"], "name": wf["name"], "created_at": wf["created_at"], "updated_at": wf["updated_at"], "nodeCount": node_count})
+    return result
+
+@app.delete("/api/workflows/{wf_id}")
+def delete_workflow(wf_id: int, user = Depends(get_current_user), db = Depends(get_db)):
+    wf = db.execute("SELECT id FROM workflows WHERE id = ? AND user_id = ?", (wf_id, user["id"])).fetchone()
+    if not wf: raise HTTPException(status_code=404, detail="Workflow not found")
+    db.execute("DELETE FROM workflows WHERE id = ? AND user_id = ?", (wf_id, user["id"]))
+    db.commit()
+    return {"message": "Workflow deleted"}
+
 
 @app.post("/api/workflows/save")
 def save_workflow(wf: WorkflowSave, user = Depends(get_current_user), db = Depends(get_db)):
@@ -188,6 +206,8 @@ def save_workflow(wf: WorkflowSave, user = Depends(get_current_user), db = Depen
         cursor = db.execute("INSERT INTO workflows (user_id, name, graph_data) VALUES (?, ?, ?)", (user["id"], wf.name, json.dumps(wf.graphData)))
         db.commit()
         return {"id": cursor.lastrowid, "message": "Workflow saved"}
+
+
 
 @app.get("/api/workflows/load/{wf_id}")
 def load_workflow(wf_id: int, user = Depends(get_current_user), db = Depends(get_db)):
