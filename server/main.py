@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 import sqlite3
 from jose import JWTError, jwt # type: ignore
@@ -172,6 +172,31 @@ def list_datasets():
                     "path": filepath
                 })
     return datasets
+
+@app.get("/api/outputs")
+def list_outputs():
+    """Lists generated artifacts (models, scripts, charts) for download."""
+    artifacts = []
+    artifacts_dir = os.path.join(UPLOADS_DIR, "artifacts")
+    if os.path.exists(artifacts_dir):
+        for f in sorted(os.listdir(artifacts_dir)):
+            fp = os.path.join(artifacts_dir, f)
+            if os.path.isfile(fp):
+                artifacts.append({
+                    "name": f,
+                    "size": f"{os.path.getsize(fp) / 1024:.1f} KB",
+                    "modified": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%H:%M:%S")
+                })
+    return artifacts
+
+@app.get("/api/outputs/{filename}")
+def download_output(filename: str):
+    """Downloads a generated artifact."""
+    safe = os.path.basename(filename)
+    filepath = os.path.join(UPLOADS_DIR, "artifacts", safe)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(filepath, filename=safe)
 
 # --- Workflow Routes ---
 @app.get("/api/workflows")
