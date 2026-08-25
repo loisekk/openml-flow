@@ -17,6 +17,14 @@ export interface ChartPayload {
   createdAt: number;
 }
 
+/** A validated AI-designed workflow awaiting user approval in AiProposalModal. */
+export interface AiWorkflowProposal {
+  summary: string;
+  nodes: { key: string; params?: Record<string, any>; reason?: string; note?: string }[];
+  edges: [number, number][];
+  notes: { attach: number; text: string }[];
+}
+
 interface WorkflowState {
   // Identity & Hydration
   activeWorkflowId: string | null;
@@ -36,6 +44,7 @@ interface WorkflowState {
   executionMetrics: any | null;
   customWorkflowCode: string | null;
   nodeCharts: Record<string, ChartPayload[]>;
+  aiProposal: AiWorkflowProposal | null;
   
   past: GraphSnapshot[];
   future: GraphSnapshot[];
@@ -74,7 +83,10 @@ interface WorkflowState {
   updateNodeStatus: (nodeId: string, status: 'idle' | 'running' | 'success' | 'error') => void;
   setNodeChart: (nodeId: string, chart: Omit<ChartPayload, 'nodeId' | 'createdAt'>) => void;
   clearNodeCharts: (nodeId?: string) => void;
-  
+  updateNoteText: (nodeId: string, text: string) => void;
+  setAiProposal: (p: AiWorkflowProposal) => void;
+  clearAiProposal: () => void;
+
   snapshot: () => void;
   undo: () => void;
   redo: () => void;
@@ -107,6 +119,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   executionMetrics: null,
   customWorkflowCode: null,
   nodeCharts: {},
+  aiProposal: null,
   past: [],
   future: [],
 
@@ -131,6 +144,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     future: [],
     customWorkflowCode: null,
     nodeCharts: {},
+    aiProposal: null,
     selectedNodeId: null,
     activeNodeStudioId: null
   }),
@@ -145,7 +159,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     past: [],
     future: [],
     customWorkflowCode: null,
-    nodeCharts: {}
+    nodeCharts: {},
+    aiProposal: null
   }),
 
   setWorkflowName: (name) => set({ workflowName: name }),
@@ -189,7 +204,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   loadTemplate: (nodes, edges) => {
     get().snapshot();
     // Templates can be stale too — hydrate them the same way.
-    set({ nodes: hydrateNodesFromRegistry(nodes), edges, selectedNodeId: null, customWorkflowCode: null, nodeCharts: {} });
+    set({ nodes: hydrateNodesFromRegistry(nodes), edges, selectedNodeId: null, customWorkflowCode: null, nodeCharts: {}, aiProposal: null });
   },
 
   onNodesChange: (changes) => {
@@ -212,7 +227,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   
   addNode: (nodeData, position) => {
     get().snapshot();
-    const newNode = { id: crypto.randomUUID(), type: 'mlNode', position, data: nodeData };
+    const type = nodeData.category === 'Documentation' ? 'noteNode' : 'mlNode';
+    const newNode = { id: crypto.randomUUID(), type, position, data: nodeData };
     set({ nodes: [...get().nodes, newNode] });
   },
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
@@ -274,6 +290,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     delete next[nodeId];
     return { nodeCharts: next };
   }),
+
+  updateNoteText: (nodeId, text) => {
+    set({
+      nodes: get().nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, noteText: text } } : n
+      ),
+    });
+  },
+  setAiProposal: (p) => set({ aiProposal: p }),
+  clearAiProposal: () => set({ aiProposal: null }),
 
   setBottomPanelHeight: (h) => set({ bottomPanelHeight: Math.max(160, Math.min(h, window.innerHeight * 0.75)) }),
   toggleBottomPanel: () => set(s => ({ bottomPanelCollapsed: !s.bottomPanelCollapsed })),
