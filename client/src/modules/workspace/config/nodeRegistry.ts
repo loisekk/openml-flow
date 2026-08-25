@@ -24,6 +24,7 @@ export interface MLNodeData {
   progress?: number;
   customCode?: string;
   filePath?: string;
+  noteText?: string;
 }
 
 const node = (
@@ -159,6 +160,9 @@ export const nodeRegistry: Record<string, MLNodeData> = {
   accuracyMetrics: node('Accuracy/Precision', 'Evaluation', '✅', '#D946EF', 'Metrics (classification + regression)', ['Model', 'Test'], ['Metrics']),
   confusionMatrix: node('Confusion Matrix', 'Evaluation', '🔲', '#D946EF', 'Visualize TP/FP/TN/FN matrix', ['Model', 'Test'], ['Plot']),
   rocCurve: node('ROC Curve', 'Evaluation', '📉', '#D946EF', 'Receiver Operating Characteristic', ['Model', 'Test'], ['Plot']),
+
+  // --- DOCUMENTATION (Amber) ---
+  note: node('Note', 'Documentation', '📝', '#F59E0B', 'Attach explanatory notes to the workflow', [], []),
 
   // --- MODEL MANAGEMENT (Green) ---
   saveModel: node('Save Pipeline (.pkl)', 'Model Management', '💾', '#22C55E', 'Persist trained model to disk', ['Model'], ['File']),
