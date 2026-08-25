@@ -768,14 +768,17 @@ print(f"Optuna best score: {study.best_value:.4f} | params: {study.best_params}"
     /* ───────── 10. EXPLAINABILITY ───────── */
     case 'SHAP Values':
       return `${MODEL_GUARD}# --- Explainability: SHAP ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 try:
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_test)
     plt.figure()
     shap.summary_plot(shap_values, X_test, show=False)
-    plt.savefig('shap_summary.png', dpi=100, bbox_inches='tight')
+    plt.savefig('uploads/artifacts/shap_summary.png', dpi=100, bbox_inches='tight')
     plt.close()
-    print("SHAP summary saved to shap_summary.png")
+    print("__MLPIPE_OUTPUT__::shap_summary.png")
+    print("SHAP summary saved to uploads/artifacts/shap_summary.png")
 except Exception as e:
     print(f"SHAP failed (tree models work best): {e}")
 
@@ -783,6 +786,8 @@ except Exception as e:
 
     case 'Feature Importance':
       return `${MODEL_GUARD}# --- Explainability: Feature Importance ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 try:
     importances = model.feature_importances_
 except AttributeError:
@@ -797,6 +802,15 @@ print("__MLPIPE_CHART__::" + json.dumps({
 }))
 for name, imp in sorted(zip(feat_names, importances), key=lambda t: t[1], reverse=True)[:10]:
     print(f"  {name}: {imp:.4f}")
+plt.figure()
+plt.barh([str(p[0]) for p in _pairs], [float(p[1]) for p in _pairs])
+plt.title('Feature Importance (top 15)')
+plt.xlabel('Importance')
+plt.tight_layout()
+plt.savefig('uploads/artifacts/feature_importance.png', dpi=100)
+plt.close()
+print("__MLPIPE_OUTPUT__::feature_importance.png")
+print("Feature importance saved to uploads/artifacts/feature_importance.png")
 
 `;
 
@@ -824,6 +838,8 @@ print("__MLPIPE_METRICS__::" + json.dumps(metrics_payload, default=str))
 
     case 'Confusion Matrix':
       return `${MODEL_GUARD}${SPLIT_GUARD}# --- Evaluation: Confusion Matrix ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 if TASK_TYPE != 'classification':
     raise RuntimeError("Confusion Matrix is for classification. For regression use the 'Accuracy/Precision' node.")
 cm = confusion_matrix(y_test, model.predict(X_test))
@@ -838,15 +854,18 @@ for i in range(cm.shape[0]):
     for j in range(cm.shape[1]):
         plt.text(j, i, str(cm[i, j]), ha='center', color='white' if cm[i, j] > _thresh else 'black')
 plt.tight_layout()
-plt.savefig('confusion_matrix.png', dpi=100)
+plt.savefig('uploads/artifacts/confusion_matrix.png', dpi=100)
 plt.close()
-print("Confusion matrix saved to confusion_matrix.png")
+print("__MLPIPE_OUTPUT__::confusion_matrix.png")
+print("Confusion matrix saved to uploads/artifacts/confusion_matrix.png")
 print("__MLPIPE_METRICS__::" + json.dumps({"confusion_matrix": cm.tolist()}, default=str))
 
 `;
 
     case 'ROC Curve':
       return `${MODEL_GUARD}${SPLIT_GUARD}# --- Evaluation: ROC Curve ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 if TASK_TYPE != 'classification':
     raise RuntimeError("ROC Curve is for classification only.")
 try:
@@ -860,9 +879,10 @@ try:
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
     plt.legend()
-    plt.savefig('roc_curve.png', dpi=100)
+    plt.savefig('uploads/artifacts/roc_curve.png', dpi=100)
     plt.close()
-    print(f"ROC-AUC: {roc_auc:.4f} (saved roc_curve.png)")
+    print("__MLPIPE_OUTPUT__::roc_curve.png")
+    print(f"ROC-AUC: {roc_auc:.4f} (saved uploads/artifacts/roc_curve.png)")
     print("__MLPIPE_METRICS__::" + json.dumps({"roc_auc": float(roc_auc)}, default=str))
 except Exception as e:
     print(f"ROC-AUC failed (needs binary classification): {e}")
@@ -872,11 +892,14 @@ except Exception as e:
     /* ───────── 12. MODEL MANAGEMENT & DEPLOYMENT ───────── */
     case 'Save Pipeline (.pkl)':
       return `${MODEL_GUARD}# --- Save Pipeline ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 artifact = {'model': model, 'target_column': TARGET_COLUMN, 'task_type': TASK_TYPE}
 if hasattr(X_train, 'columns'):
     artifact['feature_columns'] = list(X_train.columns)
-joblib.dump(artifact, 'model.pkl')
-print("Model saved to model.pkl (with target/task metadata).")
+joblib.dump(artifact, 'uploads/artifacts/model.pkl')
+print("__MLPIPE_OUTPUT__::model.pkl")
+print("Model saved to uploads/artifacts/model.pkl (downloadable from Artifacts tab)")
 
 `;
 
@@ -896,6 +919,8 @@ except ImportError:
 
     case 'Generate FastAPI':
       return `${MODEL_GUARD}# --- Deployment: Generate FastAPI ---
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
 api_code = '''
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -918,16 +943,20 @@ def predict(req: PredictRequest):
     preds = model.predict(df)
     return {"predictions": [float(p) if isinstance(p, (int, float)) else str(p) for p in preds]}
 '''
-with open('model_api.py', 'w') as f:
+with open('uploads/artifacts/model_api.py', 'w') as f:
     f.write(api_code)
-print("Generated model_api.py. Run it with: uvicorn model_api:app --port 8000")
+print("__MLPIPE_OUTPUT__::model_api.py")
+print("Generated model_api.py in uploads/artifacts/ (downloadable from Artifacts tab)")
 
 `;
 
     case 'Export Python':
       return `${DF_GUARD}# --- Export Final Dataset ---
-df.to_csv('pipeline_output.csv', index=False)
-print(f"Final dataset exported to pipeline_output.csv ({df.shape[0]} rows x {df.shape[1]} cols)")
+import os
+os.makedirs('uploads/artifacts', exist_ok=True)
+df.to_csv('uploads/artifacts/pipeline_output.csv', index=False)
+print("__MLPIPE_OUTPUT__::pipeline_output.csv")
+print(f"Final dataset exported to uploads/artifacts/pipeline_output.csv ({df.shape[0]} rows x {df.shape[1]} cols)")
 
 `;
 
