@@ -9,7 +9,7 @@ import AIAssistantDrawer from './panels/AIAssistantDrawer';
 import NodeStudio from './panels/NodeStudio';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useWorkflowStore } from './store/workflowStore';
-import { useAuthStore } from '../auth/authStore'; // <-- IMPORT AUTH
+import { useAuthStore } from '../auth/authStore';
 import { useExecutionEngine } from './hooks/useExecutionEngine';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useValidationEngine } from './hooks/useValidationEngine';
@@ -17,10 +17,12 @@ import { nodeCategories, nodeRegistry } from './config/nodeRegistry';
 import { Sparkles, PanelBottomClose, PanelRightClose, PanelRightOpen, PanelBottomOpen } from 'lucide-react';
 import './UltimateWorkspace.css';
 
+const isMockWorkflowId = (id: string): boolean => id.startsWith('wf-') || id === 'new';
+
 const UltimateWorkspace = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { token } = useAuthStore(); // <-- GET TOKEN
+  const { token } = useAuthStore();
   
   const { 
     activeTab, setTab, addNode, undo, redo, past, future, setSelectedNodeId, nodes,
@@ -30,9 +32,9 @@ const UltimateWorkspace = () => {
     setBottomPanelHeight, setInspectorWidth, setAIAssistantWidth, aiAssistantWidth,
     activeNodeStudioId, setActiveNodeStudio,
     workflowName, setWorkflowName,
-    isHydrated, // <-- GET HYDRATION STATE
-    resetWorkspace, // <-- GET RESET FUNCTION
-    setGraph // <-- GET SET GRAPH FUNCTION
+    isHydrated,
+    resetWorkspace,
+    setGraph
   } = useWorkflowStore();
   
   const { executeWorkflow, isExecuting } = useExecutionEngine();
@@ -50,53 +52,70 @@ const UltimateWorkspace = () => {
   const activeIssues = issues.filter(i => i.severity !== 'success');
   const errorCount = activeIssues.filter(i => i.severity === 'error').length;
 
-  // CRITICAL: HYDRATION ON URL CHANGE OR REFRESH
+  // HYDRATION ON URL CHANGE OR REFRESH — with promotion awareness.
+  // When autosave creates a NEW workflow in the DB, the URL flips from a mock
+  // id ('new'/'wf-*') to the real numeric id. That's a PROMOTION, not a
+  // workflow switch: the store already holds the exact graph that was just
+  // saved. Relabel the id only — no reset, no reload (no canvas flash, and
+  // no lost-edit race while a reload fetch would be in flight).
+  const prevIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!id) return;
-    
-    // Reset store immediately to prevent state bleeding from previous workflow
+
+    const prevId = prevIdRef.current;
+    prevIdRef.current = id;
+
+    const isPromotion =
+      prevId !== null &&
+      isMockWorkflowId(prevId) &&
+      /^\d+$/.test(id);
+
+    if (isPromotion) {
+      // Store already contains the saved graph — relabel the id only.
+      useWorkflowStore.setState({ activeWorkflowId: id });
+      return;
+    }
+
+    // Genuine switch (or first mount): reset to prevent state bleeding,
+    // then hydrate. No unmount-cleanup reset here — it would wipe the store
+    // right when a promotion navigation fires, racing the save flush.
+    // Resets happen here (body) and on the next mount instead.
     resetWorkspace();
 
     const loadWorkflow = async () => {
-      if (id.startsWith('wf-') || id === 'new') {
-        // It's a mock/new workflow, just set clean state
+      if (isMockWorkflowId(id)) {
+        // New workflow: clean canvas, marked hydrated so autosave may save it.
         setGraph(id, [], []);
-      } else {
-        // It's a real DB ID, fetch from backend
-        try {
-          const res = await fetch(`/api/workflows/load/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.graphData) {
-              setGraph(
-                id, 
-                data.graphData.nodes || [], 
-                data.graphData.edges || [], 
-                data.graphData.datasetIds || [],
-                data.name || 'Untitled Workflow'
-              );
-            } else {
-              setGraph(id, [], [], [], data.name || 'Untitled Workflow');
-            }
+        return;
+      }
+      try {
+        const res = await fetch(`/api/workflows/load/${id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.graphData) {
+            setGraph(
+              id, 
+              data.graphData.nodes || [], 
+              data.graphData.edges || [], 
+              data.graphData.datasetIds || [],
+              data.name || 'Untitled Workflow'
+            );
           } else {
-            // Handle 404 (Not Found)
-            setGraph(id, [], []);
-            console.error('Workflow not found');
+            setGraph(id, [], [], [], data.name || 'Untitled Workflow');
           }
-        } catch (err) {
+        } else {
           setGraph(id, [], []);
+          console.error('Workflow not found');
         }
+      } catch (err) {
+        setGraph(id, [], []);
       }
     };
 
     loadWorkflow();
-
-    // Cleanup on unmount
-    return () => {
-      resetWorkspace();
-    };
   }, [id, token, resetWorkspace, setGraph]);
 
   useEffect(() => {
@@ -113,11 +132,11 @@ const UltimateWorkspace = () => {
         e.preventDefault();
         toggleBottomPanel();
       }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'i') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'i' && e.shiftKey) {
         e.preventDefault();
         toggleInspector();
       }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'j') {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j' && e.shiftKey) {
         e.preventDefault();
         toggleAIAssistant();
       }
@@ -187,7 +206,6 @@ const UltimateWorkspace = () => {
     setBottomPanelHeight(heights[nextIdx >= 0 ? nextIdx : 1]);
   };
 
-  // LOADING STATE: Prevent rendering canvas until hydrated to avoid empty state flash
   if (!isHydrated) {
     return (
       <div className="uw-root" style={{ justifyContent: 'center', alignItems: 'center' }}>
@@ -207,7 +225,6 @@ const UltimateWorkspace = () => {
         <div className="uw-nav-links">
           <span className="uw-nav-link active">Studio</span>
           <span className="uw-nav-link">Models</span>
-          {/* PASS WORKFLOW CONTEXT TO DATASETS */}
           <span className="uw-nav-link" onClick={() => navigate(`/datasets?fromWorkflow=${id}`)}>Datasets</span>
           <span className="uw-nav-link">Experiments</span>
           <span className="uw-nav-link">Deployments</span>
@@ -222,11 +239,14 @@ const UltimateWorkspace = () => {
       {/* 2. WORKFLOW HEADER */}
       <header className="uw-workflow-header">
         <div className="uw-breadcrumb">
-          <span style={{ color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => { resetWorkspace(); navigate('/dashboard'); }}>←</span>
+          {/* NO resetWorkspace() before navigating — resetting here empties the
+              store BEFORE the save-flush reads it, which can persist an empty
+              graph over the real one. Navigation alone is safe: the flush saves
+              pending changes, the next mount resets. */}
+          <span style={{ color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>←</span>
           <span style={{ color: 'var(--text-muted)' }}>Personal</span>
           <span style={{ color: 'var(--border)' }}>/</span>
           
-          {/* EDITABLE WORKFLOW NAME INPUT */}
           <input 
             value={workflowName}
             onChange={(e) => setWorkflowName(e.target.value)}
