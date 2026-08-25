@@ -8,6 +8,8 @@ import EvaluationsPanel from './panels/EvaluationsPanel';
 import AIAssistantDrawer from './panels/AIAssistantDrawer';
 import NodeStudio from './panels/NodeStudio';
 import ErrorBoundary from './components/ErrorBoundary';
+import AiProposalModal from './components/AiProposalModal';
+import { getNextChainPosition } from './utils/nodeLayout';
 import { useWorkflowStore } from './store/workflowStore';
 import { useAuthStore } from '../auth/authStore';
 import { useExecutionEngine } from './hooks/useExecutionEngine';
@@ -148,7 +150,7 @@ const UltimateWorkspace = () => {
   const handleAddNode = (type: string) => {
     const nodeDef = nodeRegistry[type];
     if (!nodeDef) return;
-    addNode({ ...nodeDef, status: 'idle' }, { x: 100 + Math.random() * 200, y: 100 + Math.random() * 100 });
+    addNode({ ...nodeDef, status: 'idle' }, getNextChainPosition(nodes));
   };
 
   const startVResize = (e: React.MouseEvent) => {
@@ -435,6 +437,8 @@ const UltimateWorkspace = () => {
           <NodeStudio nodeId={activeNodeStudioId} onClose={() => setActiveNodeStudio(null)} />
         </ErrorBoundary>
       )}
+
+      <AiProposalModal />
     </div>
   );
 };
