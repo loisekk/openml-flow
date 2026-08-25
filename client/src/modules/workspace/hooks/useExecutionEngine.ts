@@ -25,6 +25,7 @@ const NODE_MARKER = '__MLPIPE_NODE__::';
 const DATA_MARKER = '__MLPIPE_DATA__::';
 const METRICS_MARKER = '__MLPIPE_METRICS__::';
 const CHART_MARKER = '__MLPIPE_CHART__::';
+const OUTPUT_MARKER = '__MLPIPE_OUTPUT__::';
 
 /**
  * Standalone single-node runner — used by the WorkflowNode toolbar WITHOUT
@@ -137,6 +138,16 @@ async function runStream(code: string): Promise<boolean> {
       } catch {
         addExecutionLog('[ERROR] Failed to parse chart JSON.');
       }
+      return;
+    }
+
+    // 1.75. Artifact output → downloadable file in uploads/artifacts/
+    if (log.startsWith(OUTPUT_MARKER)) {
+      const filename = log.slice(OUTPUT_MARKER.length);
+      addExecutionLog(`📦 Artifact saved: ${filename} (see Artifacts tab)`);
+      useWorkflowStore.getState().addOutput(filename);
+      // Re-fetch artifacts list for the bottom panel
+      fetch('/api/outputs').then(r => r.json()).then(() => {}).catch(() => {});
       return;
     }
 
