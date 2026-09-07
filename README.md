@@ -264,12 +264,13 @@ Contributions are welcome! If you'd like to add a new ML node, improve the UI, o
 📖 Check out `TUTORIAL.md` for a guided walkthrough of the platform before diving in.
 
 <br>
-## ⭐ Show Your Support
+## ⭐ Star History
  
 <a href="https://www.star-history.com/?type=date&repos=loisekk%2Fopenml-flow" target="_blank">
   <img src="https://api.star-history.com/svg?repos=loisekk/openml-flow&type=Date" alt="Star History Chart" width="100%" />
 </a>
 <br>
+## ⭐ Show Your Support
  
 If OpenML Flow saves you time, consider giving it a star — it helps others discover the project!
  
