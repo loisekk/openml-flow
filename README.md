@@ -265,7 +265,6 @@ Contributions are welcome! If you'd like to add a new ML node, improve the UI, o
 
 <br>
 
-<h2 align="center">⭐ Star History</h2>
  
 <div align="center">
 <a href="https://www.star-history.com/?type=date&repos=loisekk%2Fopenml-flow" target="_blank">
