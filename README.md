@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/banner.png" alt="OpenML Flow" width="100%" />
+  <img src="assets/Banner.png" alt="OpenML Flow" width="100%" />
 </div>
 
 <div align="center">
@@ -55,7 +55,7 @@ Instead of locking users into a rigid UI, OpenML Flow provides a visual graph th
 Your mission control — manage workflows, credentials, executions, variables, and data tables. Track recent executions, monitor the activity feed, and kickstart projects from ready-made templates (Churn, Regression, Classification, NLP).
 
 <div align="center">
-  <img src="assets/dashboard.png" alt="OpenML Flow Studio Dashboard" width="100%" />
+  <img src="assets/Dashboard.png" alt="OpenML Flow Studio Dashboard" width="100%" />
 </div>
 
 ### 🧩 Visual Pipeline Canvas
@@ -63,7 +63,7 @@ Your mission control — manage workflows, credentials, executions, variables, a
 Drag nodes from the categorized library, wire them up, and execute. Every node ships with a built-in Node Inspector — live data previews, parameter editing, and generated code side-by-side. Pipeline health scoring and a real-time CPU/RAM resource monitor keep you informed at every step.
 
 <div align="center">
-  <img src="assets/workspace.png" alt="OpenML Flow Visual Pipeline Canvas" width="100%" />
+  <img src="assets/Workspace.png" alt="OpenML Flow Visual Pipeline Canvas" width="100%" />
 </div>
 
 ### 📚 Built-in Node Library
@@ -142,20 +142,20 @@ OpenML Flow uses a decoupled architecture with a React frontend communicating wi
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│                      React Frontend                        │
-│      (React 19, Vite, React Flow, Zustand, Monaco Editor)  │
-└─────────────────────────────┬───────────────────────────────┘
-                               │ HTTP / Server-Sent Events (SSE)
+│                      React Frontend                       │
+│      (React 19, Vite, React Flow, Zustand, Monaco Editor) │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ HTTP / Server-Sent Events (SSE)
 ┌─────────────────────────────▼───────────────────────────────┐
-│                      FastAPI Backend                         │
-│             (Python, SQLite, JWT Auth, OpenAI SDK)           │
+│                      FastAPI Backend                        │
+│             (Python, SQLite, JWT Auth, OpenAI SDK)          │
 └────────────────┬──────────────────────────────┬─────────────┘
-                  │                              │
-                  ▼                              ▼
-     ┌────────────────────────┐     ┌──────────────────────────┐
-     │  Local Execution Engine │     │     Local AI Gateway      │
-     │  (asyncio/subprocess)   │     │ (OpenAI API / Local Ollama)│
-     └────────────────────────┘     └──────────────────────────┘
+                 │                              │
+                 ▼                              ▼
+   ┌────────────────────────┐     ┌──────────────────────────┐
+   │ Local Execution Engine │     │     Local AI Gateway     │
+   │ (asyncio/subprocess)   │     │(OpenAI API / Local Ollama)│
+   └────────────────────────┘     └──────────────────────────┘
 ```
 
 ### 🧱 Tech Stack
