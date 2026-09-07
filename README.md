@@ -264,17 +264,18 @@ Contributions are welcome! If you'd like to add a new ML node, improve the UI, o
 📖 Check out `TUTORIAL.md` for a guided walkthrough of the platform before diving in.
 
 <br>
-## ⭐ Star History
+
+<h2 align="center">⭐ Star History</h2>
  
+<div align="center">
 <a href="https://www.star-history.com/?type=date&repos=loisekk%2Fopenml-flow" target="_blank">
   <img src="https://api.star-history.com/svg?repos=loisekk/openml-flow&type=Date" alt="Star History Chart" width="100%" />
 </a>
+</div>
 <br>
-## ⭐ Show Your Support
+<h2 align="center">⭐ Show Your Support</h2>
  
-If OpenML Flow saves you time, consider giving it a star — it helps others discover the project!
- 
-<br>
+<p align="center">If OpenML Flow saves you time, consider giving it a star — it helps others discover the project!</p>
 <div align="center">
 <sub>Copyright © 2026 OpenML Flow</sub>
  
@@ -282,7 +283,7 @@ If OpenML Flow saves you time, consider giving it a star — it helps others dis
  
 **Local-First · Code Transparency · BYOK AI**
  
-### 📄 License
+<h3 align="center">📄 License</h3>
  
 Distributed under the MIT License. See `LICENSE` for more information.
  
