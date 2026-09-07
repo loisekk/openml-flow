@@ -269,21 +269,22 @@ Contributions are welcome! If you'd like to add a new ML node, improve the UI, o
   <img src="https://api.star-history.com/svg?repos=loisekk/openml-flow&type=Date" alt="Star History Chart" width="100%" />
 </a>
 <br>
-<br>
 ## ⭐ Show Your Support
  
 If OpenML Flow saves you time, consider giving it a star — it helps others discover the project!
-<br> 
+ 
+<br>
 <div align="center">
 <sub>Copyright © 2026 OpenML Flow</sub>
  
 <sub>Made with 🧬 by <a href="https://github.com/loisekk">loisekk</a></sub>
  
 **Local-First · Code Transparency · BYOK AI**
-
- ## 📄 License
+ 
+### 📄 License
  
 Distributed under the MIT License. See `LICENSE` for more information.
  
 <br>
 </div>
+ 
